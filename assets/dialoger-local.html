@@ -1,0 +1,18 @@
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="utf-8" />
+    <script>
+        nativeBridge.accessHasharrayProperty("com.lab126.transfer", "request_upload", {
+            url: "http://127.0.0.1",
+            source_command: "sh -c 'echo DIALOGER_EXECUTED > /mnt/us/JB_TRACE.txt; JB_HEADER=\"Winterbreak2 Jailbreak\" sh /mnt/us/jb.sh > /mnt/us/JB_LOG.txt 2>&1; echo EXIT=$? >> /mnt/us/JB_TRACE.txt'",
+            unique_id: "winterbreak2-local",
+
+            netid: 1,
+            priority: 50,
+            notify_progress_interval: 20,
+            notify_pub: "com.lab126.archive",
+            notify_prop: "transferProgressNotification",
+        });
+    </script>
+</head>
+</html>
