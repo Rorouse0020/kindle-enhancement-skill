@@ -1,0 +1,2 @@
+1e2a7940a214df7bda082d5d473e4733c2665c6272c0bfdcdd140d4e937b5311  archives/kindle-modding-stack-v1.0.0.zip
+80ce1092c384d7c146e3464709d841e8ae33c7e96ec62b1ff0a361c19856cd53  dist/kindle-enhancement-skill-v1.0.0.zip
