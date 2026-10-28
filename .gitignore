@@ -1,36 +1,4 @@
-# macOS
-.DS_Store
-._*
-
-# Python
 __pycache__/
-*.py[cod]
-.venv/
-
-# 生成物（可用 scripts/gen-wallpapers.py 重新生成）
-wallpapers/raw/
-
-# Local secrets and paired-device state
-.env
-.env.*
-!.env.example
-devices.json
-authorized_keys
-known_hosts
-*.pem
-*.key
-id_rsa*
-id_ecdsa*
-id_ed25519*
-
-# Personal device data and local working downloads
-backup*/
-backups/
-/documents/
-/system/
-/fonts/
-/downloads/
-/packages/
-/converted/
-*.bak-*
-*.qiaomu-skill-backup-*
+*.pyc
+.DS_Store
+*.orig

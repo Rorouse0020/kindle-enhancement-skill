@@ -1,158 +1,149 @@
 # Kindle Enhancement Skill
 
-A practical guide and helper toolkit for turning a compatible Kindle into a customizable reading device with KOReader, an enhanced home screen, Wi-Fi book delivery, RSS news, and sleep wallpapers.
+**语言：** 中文（本文件） · [English](README.en.md)
 
-The project brings the setup sequence, configuration files, troubleshooting notes, and rollback instructions together in one place. It is designed for readers following the guide themselves and AI agents using [`SKILL.md`](SKILL.md) as the workflow entry point.
+> 把一台越狱 Kindle（重点：Paperwhite 3 / 固件 5.16.2.1.1）做成"能读、能传、能验"的增强机。
+> 端到端流水线：**越狱 → KOReader/SimpleUI → 无线传书 → 书源质量门禁 → 元数据规范化 → 验收/回滚**。
 
-**Baseline:** v1.0.0 · development records dated 26 October 2026. The detailed guides are primarily in Chinese; this README provides an English overview.
+[![Skill](https://img.shields.io/badge/agent--skill-v1.0.0-blue)]()
+[![License](https://img.shields.io/badge/license-GPL--3.0-green)]()
+[![Tested](https://img.shields.io/badge/tested-Kindle%20PW3%205.16.2.1.1-orange)]()
 
-**Downloads:** [Complete v1.0.0 toolkit ZIP](https://github.com/Rorouse0020/kindle-enhancement-skill/raw/refs/tags/v1.0.0/dist/kindle-enhancement-skill-v1.0.0.zip) · [SHA-256 checksums](https://github.com/Rorouse0020/kindle-enhancement-skill/blob/v1.0.0/SHA256SUMS.txt) · [Original development ZIP](https://github.com/Rorouse0020/kindle-enhancement-skill/raw/refs/tags/v1.0.0/archives/kindle-modding-stack-v1.0.0.zip). The complete toolkit ZIP contains the current README, guides, helper scripts, assets, and licenses. The original ZIP is preserved unchanged as a historical snapshot.
+---
 
-> **Compatibility:** The supplied development records document a Kindle Paperwhite 3 (7th generation, 2015), firmware **5.16.2.1.1**, using the **soft-float** KOReader package. Other models, firmware versions, and computer platforms require their own compatibility checks. This repository is a guided toolkit; installation includes device-side actions and separately installed upstream components.
+## 这是什么
 
-## Why this project exists
+本仓库包含两个配套的 Agent Skill（均为 `SKILL.md` + 脚本 + 参考资料结构，可被 Claude Code / Codex / 兼容 agent-skills 的工具加载）：
 
-A Kindle enhancement setup spans several projects, device settings, and computer tools. Instructions that work individually can still leave an unusable setup: the reader may not launch, transferred books may be invisible, HTTPS requests may fail, or settings may disappear after restarting KOReader.
-
-This project connects those steps and records how to diagnose the failures encountered during development.
-
-| Problem | What the toolkit provides |
+| Skill | 作用 |
 |---|---|
-| Unclear model, firmware, or package compatibility | A compatibility-first workflow and links to the upstream jailbreak selector. |
-| The device cannot retrieve the jailbreak script | A documented local-script execution variant, with preparation and hash checking. |
-| KOReader fails to launch or shows an empty library | Launcher setup, executable-mount guidance, and library-path corrections. |
-| USB transfer is inconvenient, or delivery is hard to confirm | A separate sender integration with USB pairing, SSH/SFTP delivery, and read-back SHA-256 receipts. |
-| Existing AZW3/MOBI books do not open in the documented reader setup | A documented conversion path for DRM-free files using a local sender patch and KindleUnpack. |
-| News updates fail or English articles appear as Chinese rewrites | Clock/TLS troubleshooting, source curation, and a documented original-language patch. |
-| Settings are overwritten or an installation needs to be reversed | Guidance on exiting KOReader before edits, backing up affected files, and rolling back individual changes. |
+| **kindle-enhancement**（主技能） | 越狱、KOReader/SimpleUI、传书编排、**书源质量门禁**、豆瓣核对、元数据回填、验收与回滚 |
+| **qiaomu-send2kindle**（传输层，本地增强版） | 通过 SSH/SFTP 把书送到 Kindle；本地补丁支持 **AZW3/MOBI 自动转 EPUB**、**豆瓣书名命名** |
 
-## What you can build
+> 原上游：`joeseesun/qiaomu-send2kindle`（GPL-3.0）。本仓库的版本包含本地补丁，补丁清单见 `skills/qiaomu-send2kindle/LOCAL_PATCHES.md`。
 
-| Capability | Included material | Dependencies and limits |
+## 核心能力
+
+### 1. 越狱流水线（PW3 实机验证）
+
+- 方法判定基于官方 `jailbreaks.json`：PW3 + ≤5.16.3 → **WinterBreak2**（免注册）。
+- **关键坑与解法**：官方 `dialoger.html` 依赖 GitHub Pages 拉取 `jb.sh`，国内常失败（表现为"点了没反应"）。本项目提供**本地执行版** `assets/dialoger-local.html` + `jb.sh` 本地副本，彻底去掉 GitHub 依赖。
+- 三件验收证据：`documents/JAILBROKEN.txt`、`JB_TRACE.txt`（`DIALOGER_EXECUTED`）、`libkh/bin/fbink`。
+
+### 2. KOReader + SimpleUI
+
+- 选对包：PW3（soft-float）用 `koreader-kindlepw2`。
+- 启动器 scriptlet（自动 `mount -o remount,exec /mnt/us`）。
+- 修复高频问题：`home_dir` 指错导致"书在 documents 但书架为空"。
+
+### 3. 无线传书（Wi-Fi SSH）
+
+- 配对一次（USB）后，走局域网 SSH，私钥只存 macOS 钥匙串。
+- SHA-256 回读校验，只有 `ok: true` 才算送达。
+- 收据包含：设备路径 / 字节数 / SHA-256 / 转换信息 / 命名来源。
+
+### 4. 书源质量门禁（本技能重点）
+
+传书前对每本书做**四条硬指标**检查，`pass` 才发送、`warn` 需人工确认、`block` 拒绝：
+
+| # | 指标 | 自动化 |
 |---|---|---|
-| **Compatible-device jailbreak preparation** | WinterBreak2 guide, local dialoger asset, and preparation helper. | Check the device against upstream guidance first. Jailbreak payloads are obtained separately. |
-| **KOReader reading environment** | Package-selection guidance, launcher, and library configuration. | The recorded setup used KOReader **v2026.07.1**, `kindlepw2` build. |
-| **Enhanced home screen** | SimpleUI installation and configuration guide. | The recorded setup used **3.0.0-qiaomu.16**. AI lookup is optional and requires separate provider configuration. |
-| **WeRead integration / 微信读书** | Plugin installation and account-setup guide. | The recorded setup used `weread.koplugin` **v1.6.0**. Requires the user's own account and manual login. |
-| **Wi-Fi book delivery and remote helpers** | Sender setup guide, paired SSH command helper, and recursive SFTP uploader. | Requires **qiaomu-send2kindle**, its Python runtime, completed pairing, and an awake Kindle running KOReader with SSH enabled. |
-| **DRM-free format conversion** | Documentation for the local AZW3/AZW/MOBI/PRC-to-EPUB sender enhancement. | The patched sender implementation and KindleUnpack are **outside this package**; see the limitation below. |
-| **RSS reading** | A source-catalog preset with **137 entries: 117 enabled and 20 disabled**, plus **24 English feed entries** for KOReader News downloader. | Catalog counts describe the bundled files. Feed availability and the SimpleUI news service can change. The original-language patch is a separate documented edit. |
-| **Random sleep wallpapers** | **15 bundled grayscale images**, wallpaper configuration helper, and optional generator. | Images target **1072 × 1448**. Random wallpapers apply while sleeping inside KOReader. |
-| **Diagnostics and recovery** | A read-only setup checker, a troubleshooting index, and component rollback instructions. | Automated checks cover files and configuration; manual device checks are also required. |
+| 1 | **ISBN / 出版社 / 版次**（豆瓣自动核对） | `--douban`：搜索 + 详情页比对书名/作者/出版社/年份/ISBN |
+| 2 | **EPUB 结构合法**（zip / mimetype / container / OPF / spine） | `quality_check.py` |
+| 3 | **文件大小合理**（几十 KB 的大部头 = 残缺/试读） | 体积 vs 章节/图片 + 试读关键词 |
+| 4 | **正文无脚本 / 外链跳转**（`script/iframe/javascript`/外部链接） | 全 spine XHTML 扫描 |
 
-## Requirements
+判定尺度：**`block` 只保留给「书名冲突 / 结构非法 / 正文含可执行内容」**；ISBN、出版年、出版社不一致降级为 `warn`（不同版次很常见），避免误杀正版。
 
-- **A compatible Kindle:** identify the model and installed firmware before selecting a jailbreak or reader build.
-- **A computer:** the recorded workflow used macOS. Linux users must adapt platform-specific commands and credential paths; Windows/WSL deployment is not established by the supplied records.
-- **Host tools:** Python **3.10 or later**, Bash, `curl`, `unzip`, and standard filesystem tools. Git is needed if cloning the repository. Preparation uses `shasum` or `sha256sum`.
-- **A USB data cable and a verified backup:** preserve books, notes, reading progress, fonts, and settings before device changes.
-- **Networking:** the computer and Kindle need a mutually reachable local network for wireless delivery. Downloads, account services, and news require access to their respective internet services.
-- **Separate component downloads:** obtain KOReader, plugins, the sender, and any required jailbreak assets from the upstream sources linked in the guides.
+额外容错：豆瓣占位 ISBN（`9787001xxxxxx`）、本地校验位非法 ISBN 自动忽略比对；查询词自动去括号/去「全集/共N册」变体。
 
-Optional features have additional requirements: **KindleUnpack plus the patched sender** for the documented reverse conversion, **Pillow and suitable fonts** for regenerating wallpapers, and the relevant account or API credentials for WeRead and AI features. Applying the bundled wallpapers does not require Pillow.
+### 5. 元数据规范化
 
-## Getting started
+- **ISBN / 出版社 / 日期 / 语言回填**：`backfill_isbn.py`（只改 OPF，不动正文；自动备份 + 结构复验）。
+- **设备文件名 = 豆瓣书名**：中文书用中文名、英文书用英文名；豆瓣不可用时回退元数据书名/源文件名。
+
+### 6. 可选增强
+
+插件（微信读书/SSH）、资讯 RSS 频道策展、睡眠屏保壁纸（16 张 PD/CC0 素材）、T1–T12 排障手册、回滚与恢复。
+
+## 仓库结构
+
+```
+.
+├── README.md / README.en.md        # 中文 / 英文
+├── LICENSE                          # GPL-3.0（继承自 qiaomu-send2kindle）
+├── CHANGELOG.md
+├── dist/                            # 打包产物（zip + SHA256SUMS）
+└── skills/
+    ├── kindle-enhancement/
+    │   ├── SKILL.md                 # 主流程（Phase 0-5，中文）
+    │   ├── SKILL.en.md              # 英文版
+    │   ├── scripts/
+    │   │   ├── quality_check.py     # 四条硬指标门禁（--douban 可选）
+    │   │   ├── douban_verify.py     # 豆瓣核对（多查询回退/占位ISBN识别/年份匹配）
+    │   │   ├── backfill_isbn.py     # 元数据回填（ISBN/出版社/日期/语言）
+    │   │   ├── name_policy.py       # 设备文件名 = 豆瓣书名
+    │   │   ├── kindle-push.py       # 通用 SFTP 推送
+    │   │   ├── apply-rss-curation.py / apply-wallpapers.py / gen-wallpapers.py
+    │   │   └── verify-setup.sh      # 全栈只读体检
+    │   ├── references/              # 越狱/KOReader/传书/质量门禁/排障/回滚/许可证
+    │   │   └── en/                  # 英文翻译
+    │   └── assets/                  # 越狱载荷、启动器、清理脚本、壁纸
+    └── qiaomu-send2kindle/          # 传输层（含本地补丁）
+```
+
+## 安装
 
 ```bash
-git clone https://github.com/Rorouse0020/kindle-enhancement-skill.git
-cd kindle-enhancement-skill
+# 1) 放到 agent 技能目录（或项目内 skills/）
+cp -R skills/kindle-enhancement  ~/.claude/skills/
+cp -R skills/qiaomu-send2kindle  ~/.claude/skills/
 
-# Read compatibility checks, backup instructions, and the phase overview first.
-less SKILL.md
+# 2) 传输层运行时（Python 3.10+，隔离 venv）
+RT="$HOME/Library/Application Support/Qiaomu/Kindle/runtime/bin/python3"
+"$RT" "$HOME/.claude/skills/qiaomu-send2kindle/scripts/setup_runtime.py"
+
+# 3) 格式转换器（独立安装，GPL，不随包分发）
+#    https://github.com/kevinhendricks/KindleUnpack
+#    解压到 ~/Library/Application Support/Qiaomu/Kindle/tools/kindleunpack
+#    （需存在 lib/kindleunpack.py；可用 QIAOMU_KINDLEUNPACK_DIR 覆盖）
 ```
 
-Begin with **Phase 0** in `SKILL.md`. Confirm the target device, select compatible upstream components, and complete the backup before running any preparation or installation helper. An already enhanced device can enter at the relevant phase after checking its existing state.
+依赖：macOS（已验证）、Python 3.10+、Node.js 20+（仅 native 模式 EPUB→AZW3 需要）、越狱 Kindle + KOReader SSH。
 
-For a USB-mounted device, the setup checker provides an initial inventory:
+## 使用示例
 
 ```bash
-# macOS example: exit KOReader, connect USB, and confirm the actual mount path.
-bash scripts/verify-setup.sh /Volumes/Kindle
+RT="$HOME/Library/Application Support/Qiaomu/Kindle/runtime/bin/python3"
+SK="$HOME/.claude/skills/kindle-enhancement"
+
+# 传书前门禁（含豆瓣核对）
+"$RT" "$SK/scripts/quality_check.py" "书.epub" --douban
+
+# 回填元数据（ISBN/出版社/日期/语言）
+"$RT" "$SK/scripts/backfill_isbn.py" "书.epub" --douban --fill-metadata --fix-language zh-CN
+
+# 发送（默认按豆瓣书名命名；AZW3/MOBI 自动转 EPUB）
+"$RT" ~/.claude/skills/qiaomu-send2kindle/scripts/send_to_kindle.py send "书.epub"
 ```
 
-On an unmodified Kindle, missing-component failures are expected. This command inspects the current setup; it does not install components or determine whether a jailbreak is safe for a particular model.
+## 实测记录
 
-### Deployment sequence
+- 设备：Kindle Paperwhite 3（2015）/ 固件 `5.16.2.1.1` / soft-float；越狱 WinterBreak2。
+- 已实机验证：越狱、KOReader v2026.07.1 + SimpleUI 3.0.0-qiaomu.16、SSH 配对与传书、AZW3/MOBI7→EPUB 转换、豆瓣核对（多本中文书）、ISBN/出版社/语言回填、批量改名与清理。
+- 门禁样例：《战略与路径》《三体（读客版）》达到 `pass`；《刘慈欣短篇科幻小说合集》因豆瓣仅有占位 ISBN 保持 `warn`。
 
-| Phase | Work | Completion check | Guide |
-|---|---|---|---|
-| **0 — Prepare** | Identify the device and firmware; select packages; back up data; check time and storage. | Backup is usable, compatibility is established, and the device date/time is correct. | [`SKILL.md`](SKILL.md) |
-| **1 — Jailbreak** | Follow the applicable jailbreak path, including local-script preparation if needed. | Check the documented completion markers and required components. | [Jailbreak guide](references/01-jailbreak.md) |
-| **2 — Reader and plugins** | Install KOReader, configure the launcher/library, then add the selected plugins. | KOReader launches on the device and opens a book; installed plugins are accessible. | [KOReader](references/02-koreader.md), [plugins](references/03-plugins.md) |
-| **3 — Wireless delivery** | Install the separate sender/runtime, pair over USB, and establish device trust. | Send a test book, confirm the successful read-back receipt, and open it on the Kindle. | [Wireless delivery](references/04-send2kindle.md) |
-| **4 — Content and appearance** | Apply the chosen news configuration and wallpapers. | Fetch and open an article; check original-language behavior if patched; verify a wallpaper during KOReader sleep. | [RSS](references/05-content-rss.md), [wallpapers](references/06-wallpapers.md) |
-| **5 — Verify and maintain** | Review the setup checker, perform device checks, and retain recovery copies. | Resolve failures, assess warnings, and confirm the selected features on the device. | [Troubleshooting](references/07-troubleshooting.md), [rollback](references/08-rollback.md) |
+## 边界与免责
 
-Keep KOReader running for its SSH-based wireless connection. Exit KOReader before USB-based configuration edits: the documented setup may not expose USB storage while KOReader is running, and KOReader can overwrite external settings changes when it exits.
+- 仅对**自己拥有**的设备与书籍使用；不绕过 DRM、不提供盗版内容获取、不替用户登录第三方账号。
+- 越狱可能影响保修；设备变砖风险由使用者承担（本技能包含备份/回滚流程）。
+- 豆瓣核对读取公开页面（限速 1.5s、缓存 7 天），可能因风控降级为人工核对。
+- 第三方组件与许可证见 `skills/kindle-enhancement/references/ext-credits.md` 与 `skills/qiaomu-send2kindle/LICENSE`。
 
-## Helper scripts
+## 致谢
 
-Run helpers from a terminal with the dependencies required by that operation. Review the linked guide before executing a script that writes to the device.
+[KindleModding](https://kindlemodding.org/)（越狱流程/向导数据）、[KOReader](https://github.com/koreader/koreader)、SimpleUI（Doctor Hetfield / joeseesun 定制）、[qiaomu-send2kindle](https://github.com/joeseesun/qiaomu-send2kindle)、[KindleUnpack](https://github.com/kevinhendricks/KindleUnpack)、weread.koplugin（finlater）、以及 [向阳乔木](https://qiaomu.ai) 的创作。
 
-| Script | Purpose | Effect / prerequisite |
-|---|---|---|
-| [`verify-setup.sh`](scripts/verify-setup.sh) | Inspect installed files, settings, host runtime, and storage. | Read-only checks; requires a mounted Kindle. |
-| [`kindle-prepare-local.sh`](scripts/kindle-prepare-local.sh) | Prepare the local jailbreak script and dialoger, then create storage filler files. | **Writes to the device and fills storage.** Use only after backup and compatibility checks. |
-| [`kindle-ssh.py`](scripts/kindle-ssh.py) | Execute a remote command using the sender's paired identity. | Requires the sender/runtime and a reachable SSH server. Its effect depends on the command. |
-| [`kindle-push.py`](scripts/kindle-push.py) | Upload a file or directory through SFTP. | Writes to device storage; requires the sender/runtime and pairing. |
-| [`apply-rss-curation.py`](scripts/apply-rss-curation.py) | Apply the bundled source catalog and update existing news state. | Writes catalog/state files; backs up existing affected files. Does not apply the original-language code patch. |
-| [`apply-wallpapers.py`](scripts/apply-wallpapers.py) | Copy images and configure random sleep wallpapers. | Writes images/settings; backs up the existing settings file. Exit KOReader first. |
-| [`gen-wallpapers.py`](scripts/gen-wallpapers.py) | Regenerate wallpaper assets from external images and text cards. | Writes local files; needs Pillow, internet access, and suitable local fonts. |
+## License
 
-The SSH and SFTP helpers locate the separate sender through `QIAOMU_SKILL_DIR` or their documented fallback locations. Run them with a Python environment containing the sender's dependencies; setting the path alone does not install those dependencies.
-
-### What a passing setup check means
-
-`verify-setup.sh` returns **0 when it records no failures** and **1 when it records a failure**. Warnings can remain with exit code 0.
-
-Its clock check infers a possible problem from a settings-file timestamp; it does not read the live device clock. It also does not prove that KOReader launches, an account can log in, a feed loads, a transfer opens successfully, or a wallpaper appears. Complete the corresponding device checks before calling the deployment successful.
-
-## Repository contents
-
-```text
-kindle-enhancement-skill/
-├── README.md                 # Project overview and starting point
-├── SKILL.md                  # Detailed workflow for readers and agents
-├── manifest.json             # Package metadata and recorded component baseline
-├── CHANGELOG.md              # Version history
-├── LICENSE                   # MIT terms for authored scripts
-├── LICENSE-DOCS              # CC BY 4.0 documentation terms
-├── SHA256SUMS.txt             # Checksums for both downloadable ZIP files
-├── dist/                     # Complete toolkit ZIP for distribution
-├── archives/                 # Unchanged original development ZIP
-├── references/               # Nine setup, troubleshooting, and recovery guides
-├── scripts/                  # Seven helper scripts
-└── assets/                   # Launcher, dialoger, feed presets, and wallpapers
-```
-
-The original development bundle is named `kindle-modding-stack-v1.0.0.zip`; this repository uses the publication name **kindle-enhancement-skill**. Archive contents and repository revisions should be checked separately when reproducing a setup.
-
-The distribution ZIP extracts into a `kindle-enhancement-skill/` folder with the source, guides, and assets above. The `dist/` and `archives/` directories and repository-level checksum file are kept outside that ZIP to avoid nested archives and a self-referencing checksum.
-
-## Known limits
-
-- **The conversion implementation is a separate dependency.** This package describes a local modification to qiaomu-send2kindle, but does not include the patched sender source or an installable patch artifact. Cloning the upstream sender alone does not reproduce that enhancement. Start with direct EPUB delivery unless you have the documented patched implementation and KindleUnpack. KFX conversion and DRM removal are outside the documented workflow.
-- **Host portability is incomplete.** Some helpers use macOS credential paths and BSD command syntax. The wallpaper generator also refers to local font locations. Review and adapt these before using another host; regeneration can produce fewer images when fonts or downloads are unavailable.
-- **The upstream versions are a recorded baseline.** They are not a claim about the latest releases or compatibility with future firmware and plugins. Recheck upstream instructions before installing or upgrading.
-- **Some features depend on external services.** RSS feeds, the SimpleUI news backend, WeRead, and optional AI providers can change independently of this repository.
-- **Wallpapers are scoped to KOReader sleep.** The package does not install a system-wide native Kindle screensaver replacement.
-
-## Device changes and private data
-
-Back up first. Jailbreaking changes device software and can leave a device unusable if the procedure fails. Follow the selected guide's power, storage, and firmware precautions. Before a factory reset on an OTA-blocked device, consult the [rollback guide](references/08-rollback.md) for restoring the required update state.
-
-Use books and accounts you are entitled to access. Format conversion in this workflow is limited to **DRM-free** files. WeRead is a third-party integration; complete authentication yourself and consider its upstream account-risk notes.
-
-Keep personal books, clippings, device backups, serial numbers, pairing records, private keys, cookies, and API credentials out of Git commits, release archives, and issue reports. Review diagnostic output before sharing it.
-
-## Maintenance and contributions
-
-For a bug report, include the model, firmware, relevant component versions, reproduction steps, and redacted output. Clearly distinguish a proposed setup from one tested on hardware. Use the [troubleshooting guide](references/07-troubleshooting.md) to identify the affected layer.
-
-When updating a component, record the version change in [`CHANGELOG.md`](CHANGELOG.md), check any local modifications against the new upstream source, and verify the affected workflow on the device. Retain a known working configuration and its recovery instructions.
-
-## Upstream projects and licensing
-
-This toolkit connects work from [KindleModding](https://kindlemodding.org/jailbreaking/), [KOReader](https://github.com/koreader/koreader), [SimpleUI upstream](https://github.com/doctorhetfield-cmd/simpleui.koplugin), [qiaomu SimpleUI](https://github.com/joeseesun/qiaomu-simpleui), [qiaomu-send2kindle](https://github.com/joeseesun/qiaomu-send2kindle), [WeRead for KOReader](https://github.com/finlater/weread.koplugin), [KindleUnpack](https://github.com/kevinhendricks/KindleUnpack), and [Kindle-Filler-Disk](https://github.com/bastianmarin/Kindle-Filler-Disk).
-
-Authored scripts use **MIT** terms and documentation uses **CC BY 4.0**; see [`LICENSE`](LICENSE) and [`LICENSE-DOCS`](LICENSE-DOCS). Wallpaper assets and third-party components retain their respective terms. See the [credits and component notices](references/09-credits.md) and [wallpaper source records](assets/wallpapers/sources.json). Upstream reader/plugin binaries, Kindle firmware, and personal reading content are not bundled with this toolkit.
+GPL-3.0（见 [LICENSE](LICENSE)）；壁纸素材为 Public Domain / CC0，详见 `skills/kindle-enhancement/assets/wallpapers/sources.json`。
