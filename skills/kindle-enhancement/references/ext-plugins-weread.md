@@ -1,64 +1,64 @@
-# 03 · KOReader 插件：SimpleUI / 微信读书 / SSH
+# 03 · KOReader plugins: SimpleUI / WeRead / SSH
 
-> 目标：类手机主页（SimpleUI）、中文书源（微信读书）、远程访问（SSH）。
-> 前提：`references/ext-koreader.md` 完成，KOReader 能正常启动。
-> 通用规则：插件目录名必须严格为 **`<名字>.koplugin`**，装完**必须重启 KOReader** 才加载。
+> Goal: a phone-like home screen (SimpleUI), a Chinese book source (WeRead), and remote access (SSH).
+> Prerequisite: `references/ext-koreader.md` completed and KOReader launches normally.
+> General rule: the plugin directory name must be exactly **`<name>.koplugin`**, and **KOReader must be restarted** after installation for it to load.
 
 ---
 
-## 1. SimpleUI（类手机主页：平铺书架 / 资讯 / AI 划词）
+## 1. SimpleUI (phone-like home screen: tiled bookshelf / news / AI text selection)
 
-### 1.1 版本要求
+### 1.1 Version requirements
 
-- KOReader **≥ v2026.03**（本机 v2026.07.1 ✅）
-- 依赖 KOReader 自带 **CoverBrowser** 插件（默认启用；若关掉需重新打开）
+- KOReader **≥ v2026.03** (v2026.07.1 on this machine ✅)
+- Depends on KOReader's built-in **CoverBrowser** plugin (enabled by default; re-enable it if turned off)
 
-### 1.2 下载与校验（一定要用 Release 包，不要用 Source code zip）
+### 1.2 Download and verify (be sure to use the Release package, not the Source code zip)
 
 ```bash
 cd ~/Downloads && mkdir -p simpleui && cd simpleui
-TAG=v3.0.0-qiaomu.16      # 以 Releases 页面最新为准
+TAG=v3.0.0-qiaomu.16      # subject to the latest on the Releases page
 BASE=https://github.com/joeseesun/qiaomu-simpleui/releases/download/$TAG
 curl -L -O $BASE/simpleui.koplugin.zip
 curl -L -O $BASE/SHA256SUMS
-shasum -a 256 -c SHA256SUMS        # 期望：simpleui.koplugin.zip: OK
+shasum -a 256 -c SHA256SUMS        # expected: simpleui.koplugin.zip: OK
 ```
-> 本机实测：`simpleui.koplugin.zip` = 2,685,672 B，sha256 `4d7b5329c86bbcdab29662dc6de32e52beca34e453c8e79723fc65871fbd1790`。
+> Measured on this machine: `simpleui.koplugin.zip` = 2,685,672 B, sha256 `4d7b5329c86bbcdab29662dc6de32e52beca34e453c8e79723fc65871fbd1790`.
 
-### 1.3 安装
+### 1.3 Installation
 
 ```bash
 VOL=/Volumes/Kindle
 mkdir -p "$VOL/koreader/plugins"
-# 先备份旧版本（如果有）
+# Back up the old version first (if any)
 [ -d "$VOL/koreader/plugins/simpleui.koplugin" ] && \
   mv "$VOL/koreader/plugins/simpleui.koplugin" "$VOL/koreader/plugins/simpleui.koplugin.bak-$(date +%Y%m%d-%H%M%S)"
 unzip -q -o simpleui.koplugin.zip -d "$VOL/koreader/plugins"
-ls -d "$VOL/koreader/plugins/simpleui.koplugin"                  # 目录名必须完全一致
-find "$VOL/koreader/plugins/simpleui.koplugin" -type f | wc -l   # 本机 673
+ls -d "$VOL/koreader/plugins/simpleui.koplugin"                  # the directory name must match exactly
+find "$VOL/koreader/plugins/simpleui.koplugin" -type f | wc -l   # 673 on this machine
 grep -E 'version' "$VOL/koreader/plugins/simpleui.koplugin/_meta.lua"   # 3.0.0-qiaomu.16
 ```
 
-### 1.4 使用
+### 1.4 Usage
 
-重启 KOReader → 主页变成 SimpleUI。建议设置：
-- 设置 → 主页 → 行为 → 开启「以主页启动」
-- 首页添加「平铺书库」模块（跨子文件夹显示封面）
-- 长按文件可「从主页和书库隐藏」（只影响显示）
+Restart KOReader → the home screen becomes SimpleUI. Recommended settings:
+- Settings → Home → Behavior → enable "Start with home screen"
+- Add the "Tiled library" module to the home page (shows covers across subfolders)
+- Long-press a file to "Hide from home and library" (display only)
 
-AI 功能（可选）：工具 → **乔木 AI → 用手机配置** → 扫码填 API Key（存 `/var/local/qiaomu/ai.json`，USB 不可见）。
+AI features (optional): Tools → **Qiaomu AI → Configure with phone** → scan the code and enter the API Key (stored in `/var/local/qiaomu/ai.json`, not visible over USB).
 
 ---
 
-## 2. 微信读书插件（中文书，合法订阅内阅读）
+## 2. WeRead plugin (Chinese books, reading within a legal subscription)
 
-### 2.1 说明与风险（先读）
+### 2.1 Notes and risks (read first)
 
-- 第三方开源客户端（作者 finlater），通过微信读书官方 API 读取**你自己账号**的书。
-- 作者声明：可能存在**账号风控**风险，使用后果自负；**扫码登录必须本人操作**，API Key 不要外发。
-- 与 SimpleUI 的关系：装了它，SimpleUI 会自动注册「微信读书」快捷入口。
+- A third-party open-source client (author finlater) that reads books from **your own account** via the official WeRead API.
+- The author states: there may be **account risk-control** risks, use at your own risk; **QR-code login must be performed by you personally**, and the API Key must not be shared externally.
+- Relationship with SimpleUI: with it installed, SimpleUI automatically registers a "WeRead" shortcut entry.
 
-### 2.2 下载与校验
+### 2.2 Download and verify
 
 ```bash
 cd ~/Downloads && mkdir -p weread && cd weread
@@ -66,71 +66,71 @@ TAG=v1.6.0
 BASE=https://github.com/finlater/weread.koplugin/releases/download/$TAG
 curl -L -O $BASE/weread.koplugin-$TAG.zip
 curl -L -O $BASE/weread.koplugin-$TAG.zip.sha256
-shasum -a 256 -c weread.koplugin-$TAG.zip.sha256     # 期望 OK
+shasum -a 256 -c weread.koplugin-$TAG.zip.sha256     # expect OK
 ```
-> 本机实测：`weread.koplugin-v1.6.0.zip` = 910,252 B，sha256 `647abca30fe7638d67c5c24e483409acdedaa758194f177863d1385365258d51`。
+> Measured on this machine: `weread.koplugin-v1.6.0.zip` = 910,252 B, sha256 `647abca30fe7638d67c5c24e483409acdedaa758194f177863d1385365258d51`.
 
-### 2.3 安装
+### 2.3 Installation
 
 ```bash
 VOL=/Volumes/Kindle
 unzip -q -o weread.koplugin-v1.6.0.zip -d "$VOL/koreader/plugins"
 ls -d "$VOL/koreader/plugins/weread.koplugin"
-find "$VOL/koreader/plugins/weread.koplugin" -type f | wc -l   # 本机 91
+find "$VOL/koreader/plugins/weread.koplugin" -type f | wc -l   # 91 on this machine
 grep -E 'version' "$VOL/koreader/plugins/weread.koplugin/_meta.lua"   # 1.6.0
 ```
 
-### 2.4 登录（3 步，本人操作）
+### 2.4 Login (3 steps, performed by you)
 
-1. 手机 **微信读书 App → 我 → 设置 → 微信读书 Skill → 获取 API Key**（确认已生成）。
-2. 设备 KOReader → **工具 → 微信读书 → 微信扫码登录**。
-3. 微信扫码 + 手机确认；若手机显示**四位验证码**，在 KOReader 输入。
+1. Phone **WeRead App → Me → Settings → WeRead Skill → Get API Key** (confirm it has been generated).
+2. Device KOReader → **Tools → WeRead → WeChat QR-code login**.
+3. Scan the QR code with WeChat + confirm on the phone; if the phone shows a **four-digit verification code**, enter it in KOReader.
 
-登录后：微信读书 → 书架 → 选书 → 章节/全书下载 → 用 KOReader 阅读（进度、时长、划线可同步）。
-更新插件：微信读书 → 设置 → 更新管理。
+After login: WeRead → Bookshelf → select a book → download chapter/full book → read it with KOReader (progress, reading time, and highlights can sync).
+To update the plugin: WeRead → Settings → Update management.
 
 ---
 
-## 3. SSH 插件（KOReader 自带，传书与远程排障的基础）
+## 3. SSH plugin (built into KOReader; the basis for book transfer and remote troubleshooting)
 
-KOReader 自带 `plugins/SSH.koplugin` + 补丁版 `dropbear`。
+KOReader ships with `plugins/SSH.koplugin` + a patched `dropbear`.
 
-| 项 | 值 |
+| Item | Value |
 |---|---|
-| 端口 | 默认 **2222**（设置键 `SSH_port`） |
-| 公钥文件 | `/mnt/us/koreader/settings/SSH/authorized_keys` |
-| 自启 | `SSH_autostart = true`（由 send2kindle 配对时写入） |
-| 只能密钥登录 | `SSH_key_only_auth = true` |
-| 启动方式 | KOReader → 工具 → SSH server（勾选）；或随 KOReader 启动自启 |
-| 生命周期 | **KOReader 退出即停止**；设备休眠/断网也会不可达 |
+| Port | Default **2222** (settings key `SSH_port`) |
+| Public key file | `/mnt/us/koreader/settings/SSH/authorized_keys` |
+| Autostart | `SSH_autostart = true` (written when pairing with send2kindle) |
+| Key-only login | `SSH_key_only_auth = true` |
+| How to start | KOReader → Tools → SSH server (check it); or autostart along with KOReader |
+| Lifecycle | **Stops as soon as KOReader exits**; also unreachable while the device sleeps or is offline |
 
-验证（电脑侧）：
+Verify (from the computer side):
 ```bash
 nc -z -G 2 -w 2 <kindle-ip> 2222 && echo "SSH 在线"
 ```
 
 ---
 
-## 4. 通用验证
+## 4. General verification
 
 ```bash
 VOL=/Volumes/Kindle
 ls "$VOL/koreader/plugins" | grep -E 'simpleui|weread|SSH'
 grep -h 'version' "$VOL/koreader/plugins"/{simpleui,weread}.koplugin/_meta.lua
 ```
-设备上重启 KOReader 后：
-- 主页 = SimpleUI 样式
-- 工具菜单出现「微信读书」
-- 工具 → SSH server 可勾选
+After restarting KOReader on the device:
+- Home screen = SimpleUI style
+- The Tools menu shows "WeRead"
+- Tools → SSH server can be checked
 
 ---
 
-## 5. 常见问题
+## 5. FAQ
 
-| 现象 | 原因/处理 |
+| Symptom | Cause/Handling |
 |---|---|
-| 插件不出现 | 目录名不是 `<名字>.koplugin`、多一层嵌套、或没重启 KOReader |
-| SimpleUI 报错/白屏 | KOReader 版本 < 2026.03；或 CoverBrowser 被关掉 |
-| 微信读书入口没出现 | 插件未重启加载；或 SimpleUI 底栏已满（去 SimpleUI 快捷动作设置里手动添加） |
-| 微信读书登录失败 | 手机端未开通「微信读书 Skill」/API Key；或账号风控 |
-| 装了插件后 KOReader 起不来 | 移到 `.bak` 目录逐个排除（插件冲突），必要时看 `koreader/crash.log` |
+| Plugin doesn't appear | The directory name isn't `<name>.koplugin`, there's an extra nesting level, or KOReader wasn't restarted |
+| SimpleUI errors/white screen | KOReader version < 2026.03; or CoverBrowser was turned off |
+| The WeRead entry doesn't appear | The plugin wasn't loaded on restart; or the SimpleUI bottom bar is full (add it manually in the SimpleUI shortcut actions settings) |
+| WeRead login fails | "WeRead Skill"/API Key not enabled on the phone; or account risk control |
+| KOReader won't start after installing plugins | Move them to a `.bak` directory and eliminate them one by one (plugin conflicts); if necessary check `koreader/crash.log` |

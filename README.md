@@ -1,149 +1,150 @@
 # Kindle Enhancement Skill
 
-**语言：** 中文（本文件） · [English](README.en.md)
+> Turn a jailbroken Kindle (primarily: Paperwhite 3 / firmware 5.16.2.1.1) into an enhanced device that **reads, delivers, and verifies**.
+> End-to-end pipeline: **jailbreak → KOReader/SimpleUI → wireless delivery → book quality gate → metadata normalization → verification/rollback**.
 
-> 把一台越狱 Kindle（重点：Paperwhite 3 / 固件 5.16.2.1.1）做成"能读、能传、能验"的增强机。
-> 端到端流水线：**越狱 → KOReader/SimpleUI → 无线传书 → 书源质量门禁 → 元数据规范化 → 验收/回滚**。
-
-[![Skill](https://img.shields.io/badge/agent--skill-v1.0.0-blue)]()
+[![Skill](https://img.shields.io/badge/agent--skill-v1.0.1-blue)]()
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)]()
 [![Tested](https://img.shields.io/badge/tested-Kindle%20PW3%205.16.2.1.1-orange)]()
 
+**Language:** English (this file) · [中文](README.zh-CN.md)
+
 ---
 
-## 这是什么
+## What this is
 
-本仓库包含两个配套的 Agent Skill（均为 `SKILL.md` + 脚本 + 参考资料结构，可被 Claude Code / Codex / 兼容 agent-skills 的工具加载）：
+This repository ships two companion Agent Skills (`SKILL.md` + scripts + references, loadable by Claude Code / Codex / any agent-skills–compatible tool):
 
-| Skill | 作用 |
+| Skill | Purpose |
 |---|---|
-| **kindle-enhancement**（主技能） | 越狱、KOReader/SimpleUI、传书编排、**书源质量门禁**、豆瓣核对、元数据回填、验收与回滚 |
-| **qiaomu-send2kindle**（传输层，本地增强版） | 通过 SSH/SFTP 把书送到 Kindle；本地补丁支持 **AZW3/MOBI 自动转 EPUB**、**豆瓣书名命名** |
+| **kindle-enhancement** (primary) | Jailbreak, KOReader/SimpleUI, delivery orchestration, **book quality gate**, Douban verification, metadata backfill, verification and rollback |
+| **qiaomu-send2kindle** (transport, locally enhanced) | Delivers books over SSH/SFTP; local patches add **automatic AZW3/MOBI → EPUB conversion** and **Douban-title file naming** |
 
-> 原上游：`joeseesun/qiaomu-send2kindle`（GPL-3.0）。本仓库的版本包含本地补丁，补丁清单见 `skills/qiaomu-send2kindle/LOCAL_PATCHES.md`。
+> Upstream: `joeseesun/qiaomu-send2kindle` (GPL-3.0). This repository contains local patches; see `skills/qiaomu-send2kindle/LOCAL_PATCHES.md`.
 
-## 核心能力
+## Core capabilities
 
-### 1. 越狱流水线（PW3 实机验证）
+### 1. Jailbreak pipeline (verified on real hardware)
 
-- 方法判定基于官方 `jailbreaks.json`：PW3 + ≤5.16.3 → **WinterBreak2**（免注册）。
-- **关键坑与解法**：官方 `dialoger.html` 依赖 GitHub Pages 拉取 `jb.sh`，国内常失败（表现为"点了没反应"）。本项目提供**本地执行版** `assets/dialoger-local.html` + `jb.sh` 本地副本，彻底去掉 GitHub 依赖。
-- 三件验收证据：`documents/JAILBROKEN.txt`、`JB_TRACE.txt`（`DIALOGER_EXECUTED`）、`libkh/bin/fbink`。
+- Method selection follows the official `jailbreaks.json`: PW3 + ≤5.16.3 → **WinterBreak2** (no registration required).
+- **Key pitfall and fix**: the official `dialoger.html` fetches `jb.sh` from GitHub Pages, which often fails (symptom: "nothing happens after tapping Jailbreak"). This project ships a **local-execution** `assets/dialoger-local.html` plus a local `jb.sh` copy, eliminating the GitHub dependency.
+- Three verification artifacts: `documents/JAILBROKEN.txt`, `JB_TRACE.txt` (`DIALOGER_EXECUTED`), and `libkh/bin/fbink`.
 
 ### 2. KOReader + SimpleUI
 
-- 选对包：PW3（soft-float）用 `koreader-kindlepw2`。
-- 启动器 scriptlet（自动 `mount -o remount,exec /mnt/us`）。
-- 修复高频问题：`home_dir` 指错导致"书在 documents 但书架为空"。
+- Correct package: PW3 (soft-float) uses `koreader-kindlepw2`.
+- Launcher scriptlet (remounts `/mnt/us` as exec automatically).
+- Fixes a common failure where a wrong `home_dir` makes books invisible even though they are in `documents/`.
 
-### 3. 无线传书（Wi-Fi SSH）
+### 3. Wireless delivery (Wi-Fi SSH)
 
-- 配对一次（USB）后，走局域网 SSH，私钥只存 macOS 钥匙串。
-- SHA-256 回读校验，只有 `ok: true` 才算送达。
-- 收据包含：设备路径 / 字节数 / SHA-256 / 转换信息 / 命名来源。
+- Pair once over USB; afterward everything runs over LAN SSH, with the private key stored only in the macOS Keychain.
+- SHA-256 read-back verification; delivery counts only when `ok: true`.
+- Receipts include device path, byte count, SHA-256, conversion info, and naming source.
 
-### 4. 书源质量门禁（本技能重点）
+### 4. Book quality gate (the centerpiece)
 
-传书前对每本书做**四条硬指标**检查，`pass` 才发送、`warn` 需人工确认、`block` 拒绝：
+Every book is checked against **four hard criteria** before delivery: `pass` sends, `warn` needs human confirmation, `block` is refused.
 
-| # | 指标 | 自动化 |
+| # | Criterion | Automation |
 |---|---|---|
-| 1 | **ISBN / 出版社 / 版次**（豆瓣自动核对） | `--douban`：搜索 + 详情页比对书名/作者/出版社/年份/ISBN |
-| 2 | **EPUB 结构合法**（zip / mimetype / container / OPF / spine） | `quality_check.py` |
-| 3 | **文件大小合理**（几十 KB 的大部头 = 残缺/试读） | 体积 vs 章节/图片 + 试读关键词 |
-| 4 | **正文无脚本 / 外链跳转**（`script/iframe/javascript`/外部链接） | 全 spine XHTML 扫描 |
+| 1 | **ISBN / publisher / edition match** (Douban) | `--douban`: search + detail-page comparison of title/author/publisher/year/ISBN |
+| 2 | **Valid EPUB structure** (zip / mimetype / container / OPF / spine) | `quality_check.py` |
+| 3 | **Reasonable file size** (a few dozen KB for a long book = truncated/sample) | size vs. chapters/images + sample keywords |
+| 4 | **No scripts or external redirects in the body** (`script/iframe/javascript`/external links) | full spine XHTML scan |
 
-判定尺度：**`block` 只保留给「书名冲突 / 结构非法 / 正文含可执行内容」**；ISBN、出版年、出版社不一致降级为 `warn`（不同版次很常见），避免误杀正版。
+Decision policy: **`block` is reserved for title conflicts, invalid structure, or executable content**. ISBN, publication-year, and publisher mismatches downgrade to `warn` (different editions are common), avoiding false negatives on legitimate editions.
 
-额外容错：豆瓣占位 ISBN（`9787001xxxxxx`）、本地校验位非法 ISBN 自动忽略比对；查询词自动去括号/去「全集/共N册」变体。
+Additional tolerance: Douban placeholder ISBNs (`9787001xxxxxx`) and locally invalid ISBN check digits are ignored during comparison; query variants automatically strip parentheses and suffixes such as "全集" (complete works) and "共N册" (N volumes).
 
-### 5. 元数据规范化
+### 5. Metadata normalization
 
-- **ISBN / 出版社 / 日期 / 语言回填**：`backfill_isbn.py`（只改 OPF，不动正文；自动备份 + 结构复验）。
-- **设备文件名 = 豆瓣书名**：中文书用中文名、英文书用英文名；豆瓣不可用时回退元数据书名/源文件名。
+- **ISBN / publisher / date / language backfill** via `backfill_isbn.py` (OPF only, body untouched; automatic backup + structural re-validation).
+- **Device filename = Douban title**: Chinese titles for Chinese books, English titles for English books; falls back to metadata title or source filename when Douban is unavailable.
 
-### 6. 可选增强
+### 6. Optional enhancements
 
-插件（微信读书/SSH）、资讯 RSS 频道策展、睡眠屏保壁纸（16 张 PD/CC0 素材）、T1–T12 排障手册、回滚与恢复。
+Plugins (WeRead/SSH), RSS news curation, sleep-screen wallpapers (16 public-domain/CC0 images), a T1–T12 troubleshooting manual, and rollback/recovery procedures.
 
-## 仓库结构
+## Repository layout
 
 ```
 .
-├── README.md / README.en.md        # 中文 / 英文
-├── LICENSE                          # GPL-3.0（继承自 qiaomu-send2kindle）
+├── README.md                       # English (default)
+├── README.zh-CN.md                 # Chinese
+├── LICENSE                          # GPL-3.0 (inherited from qiaomu-send2kindle)
 ├── CHANGELOG.md
-├── dist/                            # 打包产物（zip + SHA256SUMS）
+├── dist/                            # release packages (zip + SHA256SUMS)
 └── skills/
     ├── kindle-enhancement/
-    │   ├── SKILL.md                 # 主流程（Phase 0-5，中文）
-    │   ├── SKILL.en.md              # 英文版
+    │   ├── SKILL.md                 # primary workflow (Phase 0-5), English (default)
+    │   ├── SKILL.zh-CN.md           # Chinese translation
     │   ├── scripts/
-    │   │   ├── quality_check.py     # 四条硬指标门禁（--douban 可选）
-    │   │   ├── douban_verify.py     # 豆瓣核对（多查询回退/占位ISBN识别/年份匹配）
-    │   │   ├── backfill_isbn.py     # 元数据回填（ISBN/出版社/日期/语言）
-    │   │   ├── name_policy.py       # 设备文件名 = 豆瓣书名
-    │   │   ├── kindle-push.py       # 通用 SFTP 推送
+    │   │   ├── quality_check.py     # four-criteria gate (optional --douban)
+    │   │   ├── douban_verify.py     # Douban verification (multi-query fallback, placeholder-ISBN detection, year matching)
+    │   │   ├── backfill_isbn.py     # metadata backfill (ISBN/publisher/date/language)
+    │   │   ├── name_policy.py       # device filename = Douban title
+    │   │   ├── kindle-push.py       # generic SFTP push
     │   │   ├── apply-rss-curation.py / apply-wallpapers.py / gen-wallpapers.py
-    │   │   └── verify-setup.sh      # 全栈只读体检
-    │   ├── references/              # 越狱/KOReader/传书/质量门禁/排障/回滚/许可证
-    │   │   └── en/                  # 英文翻译
-    │   └── assets/                  # 越狱载荷、启动器、清理脚本、壁纸
-    └── qiaomu-send2kindle/          # 传输层（含本地补丁）
+    │   │   └── verify-setup.sh      # read-only full-stack health check
+    │   ├── references/              # English references (default)
+    │   │   └── zh-CN/               # Chinese translations
+    │   └── assets/                  # jailbreak payloads, launcher, cleanup scripts, wallpapers
+    └── qiaomu-send2kindle/          # transport layer (with local patches)
 ```
 
-## 安装
+## Installation
 
 ```bash
-# 1) 放到 agent 技能目录（或项目内 skills/）
+# 1) Install into an agent skills directory (or a project's skills/)
 cp -R skills/kindle-enhancement  ~/.claude/skills/
 cp -R skills/qiaomu-send2kindle  ~/.claude/skills/
 
-# 2) 传输层运行时（Python 3.10+，隔离 venv）
+# 2) Transport runtime (Python 3.10+, isolated venv)
 RT="$HOME/Library/Application Support/Qiaomu/Kindle/runtime/bin/python3"
 "$RT" "$HOME/.claude/skills/qiaomu-send2kindle/scripts/setup_runtime.py"
 
-# 3) 格式转换器（独立安装，GPL，不随包分发）
+# 3) Format converter (installed separately, GPL, not redistributed here)
 #    https://github.com/kevinhendricks/KindleUnpack
-#    解压到 ~/Library/Application Support/Qiaomu/Kindle/tools/kindleunpack
-#    （需存在 lib/kindleunpack.py；可用 QIAOMU_KINDLEUNPACK_DIR 覆盖）
+#    Extract to ~/Library/Application Support/Qiaomu/Kindle/tools/kindleunpack
+#    (must contain lib/kindleunpack.py; override with QIAOMU_KINDLEUNPACK_DIR)
 ```
 
-依赖：macOS（已验证）、Python 3.10+、Node.js 20+（仅 native 模式 EPUB→AZW3 需要）、越狱 Kindle + KOReader SSH。
+Requirements: macOS (verified), Python 3.10+, Node.js 20+ (only for native-mode EPUB→AZW3), a jailbroken Kindle with KOReader SSH.
 
-## 使用示例
+## Usage
 
 ```bash
 RT="$HOME/Library/Application Support/Qiaomu/Kindle/runtime/bin/python3"
 SK="$HOME/.claude/skills/kindle-enhancement"
 
-# 传书前门禁（含豆瓣核对）
-"$RT" "$SK/scripts/quality_check.py" "书.epub" --douban
+# Quality gate before delivery (with Douban verification)
+"$RT" "$SK/scripts/quality_check.py" "book.epub" --douban
 
-# 回填元数据（ISBN/出版社/日期/语言）
-"$RT" "$SK/scripts/backfill_isbn.py" "书.epub" --douban --fill-metadata --fix-language zh-CN
+# Backfill metadata (ISBN/publisher/date/language)
+"$RT" "$SK/scripts/backfill_isbn.py" "book.epub" --douban --fill-metadata --fix-language en-US
 
-# 发送（默认按豆瓣书名命名；AZW3/MOBI 自动转 EPUB）
-"$RT" ~/.claude/skills/qiaomu-send2kindle/scripts/send_to_kindle.py send "书.epub"
+# Deliver (names files by Douban title; AZW3/MOBI are converted to EPUB automatically)
+"$RT" ~/.claude/skills/qiaomu-send2kindle/scripts/send_to_kindle.py send "book.epub"
 ```
 
-## 实测记录
+## Field-tested
 
-- 设备：Kindle Paperwhite 3（2015）/ 固件 `5.16.2.1.1` / soft-float；越狱 WinterBreak2。
-- 已实机验证：越狱、KOReader v2026.07.1 + SimpleUI 3.0.0-qiaomu.16、SSH 配对与传书、AZW3/MOBI7→EPUB 转换、豆瓣核对（多本中文书）、ISBN/出版社/语言回填、批量改名与清理。
-- 门禁样例：《战略与路径》《三体（读客版）》达到 `pass`；《刘慈欣短篇科幻小说合集》因豆瓣仅有占位 ISBN 保持 `warn`。
+- Device: Kindle Paperwhite 3 (2015) / firmware `5.16.2.1.1` / soft-float, jailbroken with WinterBreak2.
+- Verified on real hardware: jailbreak, KOReader v2026.07.1 + SimpleUI 3.0.0-qiaomu.16, SSH pairing and delivery, AZW3/MOBI7→EPUB conversion, Douban verification on multiple Chinese books, ISBN/publisher/language backfill, batch renaming and cleanup.
+- Gate samples: *战略与路径* and *三体（读客版）* reach `pass`; *刘慈欣短篇科幻小说合集* stays `warn` because Douban only has a placeholder ISBN.
 
-## 边界与免责
+## Boundaries and disclaimer
 
-- 仅对**自己拥有**的设备与书籍使用；不绕过 DRM、不提供盗版内容获取、不替用户登录第三方账号。
-- 越狱可能影响保修；设备变砖风险由使用者承担（本技能包含备份/回滚流程）。
-- 豆瓣核对读取公开页面（限速 1.5s、缓存 7 天），可能因风控降级为人工核对。
-- 第三方组件与许可证见 `skills/kindle-enhancement/references/ext-credits.md` 与 `skills/qiaomu-send2kindle/LICENSE`。
+- For use only with devices and books you own. No DRM circumvention, no sourcing pirated content, no logging into third-party accounts on your behalf.
+- Jailbreaking may void the warranty; bricking risk is borne by the user (this skill includes backup/rollback procedures).
+- Douban verification reads public pages (1.5 s rate limit, 7-day cache) and may degrade to manual verification when rate-limited.
+- Third-party components and licenses: see `skills/kindle-enhancement/references/ext-credits.md` and `skills/qiaomu-send2kindle/LICENSE`.
 
-## 致谢
+## Credits
 
-[KindleModding](https://kindlemodding.org/)（越狱流程/向导数据）、[KOReader](https://github.com/koreader/koreader)、SimpleUI（Doctor Hetfield / joeseesun 定制）、[qiaomu-send2kindle](https://github.com/joeseesun/qiaomu-send2kindle)、[KindleUnpack](https://github.com/kevinhendricks/KindleUnpack)、weread.koplugin（finlater）、以及 [向阳乔木](https://qiaomu.ai) 的创作。
+[KindleModding](https://kindlemodding.org/) (jailbreak process and wizard data), [KOReader](https://github.com/koreader/koreader), SimpleUI (Doctor Hetfield / qiaomu customization), [qiaomu-send2kindle](https://github.com/joeseesun/qiaomu-send2kindle), [KindleUnpack](https://github.com/kevinhendricks/KindleUnpack), weread.koplugin (finlater), and [向阳乔木](https://qiaomu.ai).
 
 ## License
 
-GPL-3.0（见 [LICENSE](LICENSE)）；壁纸素材为 Public Domain / CC0，详见 `skills/kindle-enhancement/assets/wallpapers/sources.json`。
+GPL-3.0 (see [LICENSE](LICENSE)); wallpaper assets are public domain / CC0, detailed in `skills/kindle-enhancement/assets/wallpapers/sources.json`.

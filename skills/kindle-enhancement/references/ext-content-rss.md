@@ -1,46 +1,46 @@
-# 05 · 资讯 RSS（SimpleUI 乔木精选 + 原文优先 + 英文源）
+# 05 · News RSS (SimpleUI Qiaomu Picks + original-language priority + English sources)
 
-> 目标：在 SimpleUI 的「资讯」里读 AI/投资内容；**英文源保持英文原文**；另用 KOReader 的 News downloader 订阅任意英文 RSS。
-> 前提：KOReader + SimpleUI 已装（`references/ext-koreader.md`、`03`）。
+> Goal: read AI/investment content under SimpleUI's "News"; **English sources stay in the original English**; also subscribe to any English RSS with KOReader's News downloader.
+> Prerequisite: KOReader + SimpleUI installed (`references/ext-koreader.md`, `03`).
 
 ---
 
-## 1. 机制（先理解，再改）
+## 1. Mechanism (understand it before changing anything)
 
-SimpleUI「资讯」读取**乔木 AI RSS 服务** `https://rss.qiaomu.ai`：
+SimpleUI "News" reads the **Qiaomu AI RSS service** `https://rss.qiaomu.ai`:
 
-| 接口 | 用途 |
+| Endpoint | Purpose |
 |---|---|
-| `GET /api/entries?limit=N` | 全部精选（**服务端精选，本地开关不影响它**） |
-| `GET /api/sources/<id>/entries?limit=N` | 单个源的条目 |
-| `GET /api/entry/<id>` | 文章正文（**原文**） |
-| `GET /api/entry/<id>/rewrite` | 中文「精读」改写版 |
-| `GET /api/sources` | 服务端完整源目录（137 个） |
+| `GET /api/entries?limit=N` | All picks (**server-side picks; local switches don't affect them**) |
+| `GET /api/sources/<id>/entries?limit=N` | Entries of a single source |
+| `GET /api/entry/<id>` | Article body (**original**) |
+| `GET /api/entry/<id>/rewrite` | Chinese "close reading" rewritten version |
+| `GET /api/sources` | Full server-side source catalog (137) |
 
-- 源目录：`koreader/plugins/simpleui.koplugin/data/qiaomu_sources.json`（137 个源，字段 `id/name/category/siteUrl/enabled`）。
-- 频道由分类推导：**全部精选 / 微信公众号 / 播客 / Newsletter / 博客与资讯 / 读者社区** + 每个源的单频道。
-- ⚠️ **Kindle 版不支持自定义 RSS 订阅**（无 OPML、无"添加源"）。`/api/sources` 的 137 个 = 插件内置的 137 个，**没有额外源可加**。
-- 请求实现：Kindle 上用 `/usr/bin/curl`，并带 `--connect-to rss.qiaomu.ai:443:vps2.qiaomu.ai:443`（CDN 兜底）。
+- Source catalog: `koreader/plugins/simpleui.koplugin/data/qiaomu_sources.json` (137 sources, fields `id/name/category/siteUrl/enabled`).
+- Channels are derived from categories: **All Picks / WeChat public accounts / Podcasts / Newsletter / Blogs and news / Reader community** + one single channel per source.
+- ⚠️ **The Kindle version doesn't support custom RSS subscriptions** (no OPML, no "add source"). The 137 from `/api/sources` = the 137 built into the plugin, **no additional sources can be added**.
+- Request implementation: on the Kindle it uses `/usr/bin/curl`, with `--connect-to rss.qiaomu.ai:443:vps2.qiaomu.ai:443` (CDN fallback).
 
 ---
 
-## 2. ⚠️ 英文源被翻译成中文 → 打"原文优先"补丁
+## 2. ⚠️ English sources translated into Chinese → apply the "original priority" patch
 
-### 症状
-英文源（Ben's Bites / Import AI / Interconnects…）在设备上标题和正文都是中文译文。
+### Symptom
+English sources (Ben's Bites / Import AI / Interconnects…) show Chinese translations for both titles and body on the device.
 
-### 根因
-`features/sui_news.lua`：
-- `M.title(entry)` 优先返回 `titleZh`；
-- `M.fetchArticle(id)` 优先请求 `/rewrite`（中文精读），命中就不取原文。
+### Root cause
+`features/sui_news.lua`:
+- `M.title(entry)` returns `titleZh` first;
+- `M.fetchArticle(id)` requests `/rewrite` (Chinese close reading) first, and if it hits, doesn't fetch the original.
 
-### 实测对比（同一个条目）
-| 接口 | 长度 | 中文占比 |
+### Measured comparison (same entry)
+| Endpoint | Length | Chinese share |
 |---|---|---|
-| `/api/entry/<id>`（原文） | 5,872 B | **0%**（纯英文） |
-| `/api/entry/<id>/rewrite`（改写） | 3,483 B | 40% |
+| `/api/entry/<id>` (original) | 5,872 B | **0%** (pure English) |
+| `/api/entry/<id>/rewrite` (rewritten) | 3,483 B | 40% |
 
-### 补丁（两处；改前先备份，**KOReader 必须退出**）
+### Patch (two places; back up first, **KOReader must be exited**)
 
 ```bash
 VOL=/Volumes/Kindle
@@ -51,7 +51,7 @@ import sys
 p=sys.argv[1]; s=open(p,encoding='utf-8').read()
 
 old_title='    return type(entry.titleZh) == "string" and entry.titleZh ~= "" and entry.titleZh or entry.title'
-new_title='    -- [local patch] 原文优先：英文源显示英文标题\n    return entry.title or entry.titleZh'
+new_title='    -- [local patch] original priority: English sources show English titles\n    return entry.title or entry.titleZh'
 assert old_title in s
 s=s.replace(old_title,new_title,1)
 
@@ -63,35 +63,35 @@ old_rw='''    -- Prefer the already published Chinese reading version; do not ge
         return { body = rewrite.body, format = "md", version = "rewrite", base_url = M.ORIGIN, media_version=1 }
     end
 '''
-new_rw='''    -- [local patch] 原文优先：不做中文改写；需要中文摘要时用 *_zh 精读频道。
+new_rw='''    -- [local patch] original priority: no Chinese rewriting; use the *_zh close-reading channel when a Chinese summary is needed.
 '''
 assert old_rw in s
 s=s.replace(old_rw,new_rw,1)
 open(p,'w',encoding='utf-8').write(s)
 print("patched")
 PY
-grep -c '\[local patch\]' "$F"     # 期望 2
-grep -c '/rewrite' "$F"            # 期望 0
+grep -c '\[local patch\]' "$F"     # expect 2
+grep -c '/rewrite' "$F"            # expect 0
 ```
-> 安全性：实测各类型源都仍有原文内容（英文 newsletter 45 KB、公众号 44 KB、
-> `*_zh` 精读源原文即中文摘要 8–11 KB），删掉改写分支不会导致打不开。
+> Safety: measured across all source types, original content is still available (English newsletter 45 KB, WeChat public account 44 KB,
+> `*_zh` close-reading sources whose original is the Chinese summary 8–11 KB), so removing the rewrite branch won't make anything fail to open.
 
 ---
 
-## 3. 源目录整理（AI + 投资，117 / 20）
+## 3. Source catalog curation (AI + investment, 117 / 20)
 
-关闭 20 个与主题无关的源（James Clear、Wait But Why、Scott Young、Dan Koe、中国国家地理、
-知乎日报、人物、南方人物周刊、L先生说、HackerNoon 生活/写作/PM、Joe Rogan、80,000 Hours、FS Brain Food 等）。
+Disable 20 sources unrelated to the topic (James Clear, Wait But Why, Scott Young, Dan Koe, China National Geographic (中国国家地理),
+Zhihu Daily (知乎日报), Renwu (人物), Southern People Weekly (南方人物周刊), L Says (L先生说), HackerNoon Life/Writing/PM, Joe Rogan, 80,000 Hours, FS Brain Food, etc.).
 
 ```bash
 python3 scripts/apply-rss-curation.py /Volumes/Kindle
 ```
-脚本会：
-1. 备份并写入 `data/qiaomu_sources.json`（`assets/qiaomu_sources.curated.json` 为模板）；
-2. 若 `settings/simpleui/news/index.json` 已存在，**同步替换其中的 sources 列表**
-   （插件运行时以 state.sources 为准，不同步就仍用旧目录）。
+The script will:
+1. Back up and write `data/qiaomu_sources.json` (`assets/qiaomu_sources.curated.json` is the template);
+2. If `settings/simpleui/news/index.json` already exists, **replace its sources list in sync**
+   (the plugin uses state.sources at runtime, so without syncing it still uses the old catalog).
 
-验证：
+Verify:
 ```bash
 python3 - <<'PY'
 import json
@@ -100,28 +100,28 @@ s=d['sources']; print('总', len(s), '启用', len([x for x in s if x.get('enabl
 PY
 ```
 
-### 推荐频道（AI + 投资）
+### Recommended channels (AI + investment)
 
-| 想看 | 频道 | 代表源 |
+| What you want | Channel | Representative sources |
 |---|---|---|
-| AI 每日 | **Newsletter** | Ben's Bites、TLDR AI、Import AI、Interconnects、ChinAI、One Useful Thing、Superhuman AI、AI Breakfast、The Rundown、The Neuron、Dwarkesh、Gary Marcus |
-| AI + 投资播客 | **Podcasts** | All-In 中文精读、知行小酒馆、面基、42章经、晚点聊、张小珺、Lex Fridman、No Priors、Latent Space、Invest Like the Best、Acquired、Pivot、Freakonomics |
-| 中文 AI/财经 | **WeChat** | 新智元、赛博禅心、卡兹克、歸藏、智东西、腾讯研究院、海外独角兽、甲子光年、晚点LatePost、吴晓波频道、猫笔刀、虎嗅、一天一篇经济学人 |
-| 博客/资讯 | **Blogs and news** | 乔木博客、Simon Willison、HF Papers、Reddit AI、KDnuggets、GitHub Trending |
+| AI daily | **Newsletter** | Ben's Bites, TLDR AI, Import AI, Interconnects, ChinAI, One Useful Thing, Superhuman AI, AI Breakfast, The Rundown, The Neuron, Dwarkesh, Gary Marcus |
+| AI + investment podcasts | **Podcasts** | All-In Chinese close reading (All-In 中文精读), Zhixing Xiaojiuguan (知行小酒馆), Mianji (面基), 42 Chapters (42章经), LateTalk (晚点聊), Zhang Xiaojun (张小珺), Lex Fridman, No Priors, Latent Space, Invest Like the Best, Acquired, Pivot, Freakonomics |
+| Chinese AI/finance | **WeChat** | AI Era (新智元), Cyber Zen (赛博禅心), Kazik (卡兹克), Guizang (歸藏), Zhidx (智东西), Tencent Research Institute (腾讯研究院), Overseas Unicorn (海外独角兽), Jiazi Guangnian (甲子光年), LatePost (晚点LatePost), Wu Xiaobo Channel (吴晓波频道), Mao Bidao (猫笔刀), Huxiu (虎嗅), One Economist Article a Day (一天一篇经济学人) |
+| Blogs/news | **Blogs and news** | Qiaomu Blog (乔木博客), Simon Willison, HF Papers, Reddit AI, KDnuggets, GitHub Trending |
 
 ---
 
-## 4. 任意英文 RSS → KOReader 的 News downloader
+## 4. Any English RSS → KOReader's News downloader
 
-SimpleUI 只能读内置源，**任意英文 RSS 用 KOReader 自带插件**：
+SimpleUI can only read the built-in sources; **for any English RSS, use KOReader's built-in plugin**:
 
 ```
-配置路径：/mnt/us/koreader/news/feed_config.lua
-下载目录：/mnt/us/koreader/news/
-入口：    工具 → News downloader（新闻下载器）
+Configuration path: /mnt/us/koreader/news/feed_config.lua
+Download directory: /mnt/us/koreader/news/
+Entry point:        Tools → News downloader
 ```
 
-格式（完整样例见 `assets/feed_config.lua`，已预置 24 个实测可用的英文源）：
+Format (full sample in `assets/feed_config.lua`, preloaded with 24 verified working English sources):
 ```lua
 return {--do NOT change this line
  {"https://tldr.tech/api/rss/ai", limit=10, max_age="7d", download_full_article=true},
@@ -130,34 +130,34 @@ return {--do NOT change this line
 }
 ```
 
-### 24 个已验证英文源
+### 24 verified English sources
 
-| 分类 | 源 |
+| Category | Sources |
 |---|---|
-| AI | TLDR AI、Import AI、Interconnects、One Useful Thing、Simon Willison、Latent Space、Hugging Face Blog、Ben's Bites、The Rundown AI、OpenAI News、SemiAnalysis |
-| AI/科技新闻 | MIT Technology Review (AI)、TechCrunch (AI)、Hacker News |
-| 投资 | Stratechery、Marginal Revolution、Calculated Risk、Net Interest、Of Dollars And Data、A Wealth of Common Sense、Benedict Evans、Not Boring |
-| 投资播客 | Odd Lots、All-In Podcast |
+| AI | TLDR AI, Import AI, Interconnects, One Useful Thing, Simon Willison, Latent Space, Hugging Face Blog, Ben's Bites, The Rundown AI, OpenAI News, SemiAnalysis |
+| AI/tech news | MIT Technology Review (AI), TechCrunch (AI), Hacker News |
+| Investment | Stratechery, Marginal Revolution, Calculated Risk, Net Interest, Of Dollars And Data, A Wealth of Common Sense, Benedict Evans, Not Boring |
+| Investment podcasts | Odd Lots, All-In Podcast |
 
-安装：
+Installation:
 ```bash
 VOL=/Volumes/Kindle
 mkdir -p "$VOL/koreader/news"
 cp assets/feed_config.lua "$VOL/koreader/news/feed_config.lua"
 ```
 
-验证源是否可用（电脑端）：
+Verify whether a source is usable (from the computer):
 ```bash
 curl -sS -m 20 -L -A 'KOReader-NewsDownloader/1.0' -o /tmp/f.xml -w '%{http_code}\n' '<RSS_URL>'
-grep -c '<item' /tmp/f.xml    # >0 即有条目
+grep -c '<item' /tmp/f.xml    # >0 means there are entries
 ```
 
 ---
 
-## 5. ⚠️ 更新失败 / 列表为空
+## 5. ⚠️ Update failure / empty list
 
-**先查时钟**（本机实际遇到的就是这个）：`certificate is not yet valid` → 所有 HTTPS 失败。
+**Check the clock first** (this is exactly what happened on this machine): `certificate is not yet valid` → all HTTPS fails.
 ```bash
-ssh root@<ip> -p 2222 "date"     # 年份不对就修
+ssh root@<ip> -p 2222 "date"     # fix it if the year is wrong
 ```
-修复与其余原因见 `references/ext-troubleshooting.md` T1 / T10。
+For the fix and the other causes see `references/ext-troubleshooting.md` T1 / T10.

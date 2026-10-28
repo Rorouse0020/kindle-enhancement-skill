@@ -1,129 +1,129 @@
-# 书源质量门禁（四条硬指标）
+# Book Source Quality Gate (Four Hard Metrics)
 
-> **核心原则：传上去一本坏书，比传不上去更糟。**
-> 劣质书浪费设备空间与阅读时间，读到一半才发现残缺/错版/被篡改，代价远高于多花 1 分钟做门禁。
-> 凡判定 **BLOCK** 的书一律不发送；**WARN** 必须先向用户说明并由其确认；**PASS** 才进入发送流程。
+> **Core principle: sending a bad book is worse than not sending it.**
+> A poor-quality book wastes device space and reading time; discovering missing content/a misprinted edition/tampering halfway through costs far more than spending an extra minute on the gate.
+> Any book judged **BLOCK** is never sent; **WARN** must first be explained to the user and confirmed by them; only **PASS** enters the send flow.
 
 ---
 
-## 指标 1：ISBN / 出版社 / 版次能对上（豆瓣或出版社官网可查）
+## Metric 1: ISBN / Publisher / Edition Can Be Matched (Verifiable on Douban or the Publisher's Website)
 
-**为什么重要**：盗版拼装、旧版冒充新版、不同译本强行合并，都会在这里露馅。
+**Why it matters**: pirated assemblies, old editions posing as new ones, and forcibly merged translations all show up here.
 
-**怎么查**
+**How to check**
 
-1. 读 EPUB 元数据（`quality_check.py` 会输出）：
-   - `dc:identifier` 中的 ISBN-10/13（注意 `urn:isbn:` 前缀、`calibre:` 之类无效标识）
-   - `dc:publisher`（出版社）、`dc:date`（出版年/版次）、`dc:title`/`dc:creator`
-2. 用脚本输出的**豆瓣检索链接**核对：书名、作者、出版社、出版年、页数、ISBN 是否**全部**一致。
-3. 出版社官网/电商详情页二次核对（尤其 ISBN 与版次）。
+1. Read the EPUB metadata (`quality_check.py` prints it):
+   - ISBN-10/13 in `dc:identifier` (watch for the `urn:isbn:` prefix and invalid identifiers such as `calibre:`)
+   - `dc:publisher` (publisher), `dc:date` (publication year/edition), `dc:title`/`dc:creator`
+2. Cross-check using the **Douban search link** printed by the script: whether title, author, publisher, publication year, page count, and ISBN are **all** consistent.
+3. Second check on the publisher's website/e-commerce detail page (especially ISBN and edition).
 
-**判定**
-- 元数据齐全 + 豆瓣对上 → **PASS**
-- 缺 ISBN/出版社/日期其一，或书名作者与期望不符 → **WARN**（人工核对后决定）
-- **书名与豆瓣条目明显冲突 → BLOCK**（认错书/拼装本）
-- ISBN、出版年、出版社不一致 → **WARN**（很常见：不同版次、不同印次、套装/单册）
-- 豆瓣占位 ISBN（`9787001xxxxxx` 等）或本地 ISBN 校验位不合法 → 该项 **WARN** 并忽略比对
-- 判定原则：**block 只保留给"书名对不上"和"内容不安全"**；其余不一致降级为 warn，避免误杀正版的其他版次
-- 常见可疑特征：`creator` 是 "SoBooKs.cc" 这类扫描站水印名；书名带"精校版/全译版"却无版本信息；同一 ISBN 对应不同封面/书名。
+**Verdict**
+- Metadata complete + matches Douban → **PASS**
+- Missing any one of ISBN/publisher/date, or title/author not as expected → **WARN** (decide after manual verification)
+- **Title clearly conflicts with the Douban entry → BLOCK** (wrong book/assembled copy)
+- ISBN, publication year, or publisher inconsistent → **WARN** (very common: different editions, different printings, boxed set vs. single volume)
+- Douban placeholder ISBN (`9787001xxxxxx` etc.) or a local ISBN with an invalid checksum → **WARN** for that item and skip the comparison
+- Decision principle: **reserve block only for "title doesn't match" and "content unsafe"**; downgrade all other inconsistencies to warn, to avoid killing legitimate other editions
+- Common suspicious signs: `creator` is a scan-site watermark name like "SoBooKs.cc"; the title says "精校版/全译版" but there is no version information; the same ISBN corresponds to different covers/titles.
 
-### 1.1 自动核对（`--douban`，推荐）
+### 1.1 Automatic Verification (`--douban`, Recommended)
 
 ```bash
 RT="$HOME/Library/Application Support/Qiaomu/Kindle/runtime/bin/python3"
-"$RT" scripts/quality_check.py "/绝对路径/书.epub" --douban
+"$RT" scripts/quality_check.py "/absolute/path/book.epub" --douban
 "$RT" scripts/douban_verify.py --isbn 9787208178212
 "$RT" scripts/douban_verify.py --title "战略与路径" --author "黄奇帆"
 ```
 
-原理：豆瓣公开页面（`book.douban.com/j/subject_suggest` 搜索 + `/subject/<id>/` 详情页），
-自动比对书名、作者、出版社、出版年、ISBN，输出 `pass/warn/block`。
+How it works: Douban public pages (the `book.douban.com/j/subject_suggest` search plus the `/subject/<id>/` detail page),
+automatically comparing title, author, publisher, publication year, and ISBN, and outputting `pass/warn/block`.
 
-| 比对项 | 判定 |
+| Comparison item | Verdict |
 |---|---|
-| 书名 | 主标题（冒号前）互相包含 → pass |
-| 作者 | 任一作者互相包含（去【】前缀） → pass；扫描站水印 → warn |
-| 出版社 | 互相包含 → pass；不同 → warn |
-| 出版年 | 相同或 ±1 年 → pass；否则 warn/fail |
-| ISBN | 双方都有且一致 → pass；本地缺 → warn（可用豆瓣 ISBN 反补） |
+| Title | Main titles (before the colon) contain each other → pass |
+| Author | Any author contains the other (after stripping the 【】 prefix) → pass; scan-site watermark → warn |
+| Publisher | Mutual containment → pass; different → warn |
+| Publication year | Same or ±1 year → pass; otherwise warn/fail |
+| ISBN | Both present and identical → pass; missing locally → warn (can be backfilled from the Douban ISBN) |
 
-降级策略：豆瓣登录墙/风控/网络失败 → **warn + 提示人工**，不阻断、不误判。
-请求间隔 1.5 s、UA 伪装、15 s 超时、缓存 7 天；只读公开页面，不登录。
+Degradation strategy: Douban login wall/risk control/network failure → **warn + prompt for manual check**; no blocking, no false judgement.
+Request interval 1.5 s, UA spoofing, 15 s timeout, 7-day cache; read-only public pages, no login.
 
-**回填 ISBN（让指标 1 直接达标）**
+**Backfilling ISBN (makes Metric 1 pass directly)**
 
 ```bash
-"$RT" scripts/backfill_isbn.py "书.epub" --douban
-"$RT" scripts/backfill_isbn.py "书.epub" --isbn 9787208178212   # 手动指定
-"$RT" scripts/backfill_isbn.py "书.epub" --isbn 9787... --fix-language zh-CN  # 顺带规范语言标签
-"$RT" scripts/backfill_isbn.py "书.epub" --douban --fill-metadata            # ISBN+出版社+出版日期（占位 ISBN 自动跳过）
+"$RT" scripts/backfill_isbn.py "book.epub" --douban
+"$RT" scripts/backfill_isbn.py "book.epub" --isbn 9787208178212   # specify manually
+"$RT" scripts/backfill_isbn.py "book.epub" --isbn 9787... --fix-language zh-CN  # also normalize the language tag
+"$RT" scripts/backfill_isbn.py "book.epub" --douban --fill-metadata            # ISBN+publisher+publication date (placeholder ISBNs skipped automatically)
 ```
 
-脚本只在 OPF 插入 `<dc:identifier id="isbn">urn:isbn:…</dc:identifier>`，正文/图片不动；
-默认备份 `书.epub.orig`，写入后复验结构（mimetype 置首、container、OPF、spine）。
-回填后 `quality_check.py` 的 `1_meta` 与 `1_douban` 均可 pass。
+The script only inserts `<dc:identifier id="isbn">urn:isbn:…</dc:identifier>` into the OPF; the body text/images are untouched;
+by default it backs up to `book.epub.orig`, and after writing it re-validates the structure (mimetype first, container, OPF, spine).
+After backfilling, both `1_meta` and `1_douban` in `quality_check.py` can pass.
 
-**实测样本**（2026-10-27）：
-- 《战略与路径》→ 命中 `subject/36139006`，作者/出版社/年份一致，ISBN 9787208178212（本地缺失 → warn）
-- 《狼性时代》→ 命中 `subject/36692833`，作者/出版社/年份一致，ISBN 9787513944441（本地缺失 → warn，`creator` 为 SoBooKs.cc）
-
----
-
-## 指标 2：EPUB 结构合法（inspect 不报错）
-
-**自动化**（`scripts/quality_check.py` 指标 2，以及 `send_to_kindle.py inspect`）：
-
-- zip 可打开且 `testzip()` 无损坏条目
-- `mimetype` 是**第一个**条目且内容为 `application/epub+zip`
-- `META-INF/container.xml` 存在且能解析，rootfile 指向实际存在的 OPF
-- OPF 能解析；`spine` 非空，所有 `itemref` 都能在 `manifest` 找到
-- spine 中至少一个 XHTML/HTML 正文
-
-**判定**：任一不满足 → **BLOCK**（损坏/伪 EPUB/转换失败品，传上去也打不开）。
+**Measured samples** (2026-10-27):
+- 《战略与路径》 → hits `subject/36139006`, author/publisher/year consistent, ISBN 9787208178212 (missing locally → warn)
+- 《狼性时代》 → hits `subject/36692833`, author/publisher/year consistent, ISBN 9787513944441 (missing locally → warn, `creator` is SoBooKs.cc)
 
 ---
 
-## 指标 3：文件大小合理（几十 KB 的大部头基本是残缺版）
+## Metric 2: EPUB Structure Valid (inspect Reports No Errors)
 
-**自动化启发式**（脚本指标 3）：
+**Automation** (`scripts/quality_check.py` Metric 2, plus `send_to_kindle.py inspect`):
 
-- `< 50 KB` → 高度可疑
-- `< 150 KB` 且**无图片** → 可疑（纯文字小册子除外）
-- 标题含 `sample / excerpt / preview / 试读 / 样章 / 节选 / 预览` → 可疑
-- 输出"正文 KB / 图片数 / 章节数"供人工判断
+- The zip can be opened and `testzip()` reports no corrupt entries
+- `mimetype` is the **first** entry and its content is `application/epub+zip`
+- `META-INF/container.xml` exists and parses, and the rootfile points to an OPF that actually exists
+- The OPF parses; `spine` is non-empty, and every `itemref` is found in the `manifest`
+- At least one XHTML/HTML body in the spine
 
-**人工标尺**（经验值，中文书）：
-| 类型 | 合理区间 |
+**Verdict**: if any one fails → **BLOCK** (corrupt/fake EPUB/failed conversion — it won't open even if sent).
+
+---
+
+## Metric 3: File Size Reasonable (A Massive Book of a Few Dozen KB Is Basically a Truncated Version)
+
+**Automated heuristics** (script Metric 3):
+
+- `< 50 KB` → highly suspicious
+- `< 150 KB` and **no images** → suspicious (except text-only pamphlets)
+- Title contains `sample / excerpt / preview / 试读 / 样章 / 节选 / 预览` → suspicious
+- Outputs "body KB / image count / chapter count" for manual judgement
+
+**Manual yardstick** (empirical values, Chinese books):
+| Type | Reasonable range |
 |---|---|
-| 200–300 页纯文字 | 300 KB – 1.5 MB |
-| 400+ 页 | 1 – 3 MB |
-| 图文混排/画册 | 5 – 50 MB |
-| 学术书/含大量脚注 | 1.5 – 5 MB |
+| 200–300 pages, text only | 300 KB – 1.5 MB |
+| 400+ pages | 1 – 3 MB |
+| Illustrated/text-image mixed, picture books | 5 – 50 MB |
+| Academic books/with many footnotes | 1.5 – 5 MB |
 
-**判定**：明显低于上述区间 → **WARN**（让用户确认是不是试读/截断本）；若同时缺 ISBN 或章节数极少 → 升级为 **BLOCK**。
+**Verdict**: clearly below the ranges above → **WARN** (have the user confirm it isn't a sample/truncated copy); if ISBN is also missing or the chapter count is extremely low → escalate to **BLOCK**.
 
 ---
 
-## 指标 4：正文无脚本 / 外链跳转（转换时会剥掉 script/style/iframe）
+## Metric 4: No Scripts / External Link Redirects in the Body (Conversion Strips script/style/iframe)
 
-**自动化扫描**（脚本指标 4，扫描全部 spine XHTML）：
+**Automated scan** (script Metric 4, scanning all spine XHTML):
 
-| 命中 | 含义 | 处置 |
+| Match | Meaning | Action |
 |---|---|---|
-| `<script>`、`<iframe>`、`<object>`、`<embed>` | 可执行/嵌入内容 | **BLOCK** |
-| `javascript:` 伪协议、`on*=` 事件属性 | 点击劫持/追踪 | **BLOCK** |
-| 外部 `http(s)://` 的 `href/src` | 正文被带离/资源外链 | **WARN**（数量多或指向可疑域名 → BLOCK） |
+| `<script>`, `<iframe>`, `<object>`, `<embed>` | executable/embedded content | **BLOCK** |
+| `javascript:` pseudo-protocol, `on*=` event attributes | clickjacking/tracking | **BLOCK** |
+| External `http(s)://` `href/src` | body taken off-device/external resources | **WARN** (many of them, or pointing to suspicious domains → BLOCK) |
 
-**为什么要挡**：转换器（KindleUnpack / 内置 AZW3 writer）会剥离 `script/style/iframe`，但剥离后可能留下空白章节或跳转失效；
-更严重的是这类文件常见于"网页抓取拼装本"，正文质量极低。
+**Why block these**: the converter (KindleUnpack / the built-in AZW3 writer) strips `script/style/iframe`, but after stripping it may leave blank chapters or broken navigation;
+more seriously, such files are commonly "web-scraped assembled copies" with extremely low body quality.
 
-**判定**：含可执行内容 → **BLOCK**；仅少量外链 → **WARN** 并抽查外链目标。
+**Verdict**: contains executable content → **BLOCK**; only a few external links → **WARN** and spot-check the link targets.
 
 ---
 
-## 门禁结论与记录
+## Gate Conclusion and Record
 
-`scripts/quality_check.py` 输出：
+`scripts/quality_check.py` outputs:
 
 ```json
 {
@@ -141,17 +141,17 @@ RT="$HOME/Library/Application Support/Qiaomu/Kindle/runtime/bin/python3"
 }
 ```
 
-**门禁 → 发送 → 收据**，三步都要留痕。发送收据必须额外带上门禁结论，例如：
+**Gate → send → receipt**, all three steps must leave a trail. The send receipt must additionally carry the gate conclusion, for example:
 
 ```
-ok:true · /mnt/us/documents/书名.epub · 1,017,049 B · sha256=c531… · converted:false
-quality: pass（结构/大小/内容 自动通过，ISBN 9787… 已核对豆瓣）
+ok:true · /mnt/us/documents/book-title.epub · 1,017,049 B · sha256=c531… · converted:false
+quality: pass (structure/size/content auto-passed, ISBN 9787… verified against Douban)
 ```
 
-## 反例（本项目真实踩过的坑）
+## Counterexamples (Real Pitfalls Hit by This Project)
 
-| 场景 | 现象 | 教训 |
+| Scenario | Symptom | Lesson |
 |---|---|---|
-| AZW3 直接发给 KOReader | 点击提示"格式不支持" | 指标 2 合格 ≠ 阅读器支持；**格式匹配**要单独判（KOReader 不支持 KF8） |
-| `home_dir` 指向空目录 | 书在 `documents` 但书架空 | 门禁过了还要验"设备侧可见" |
-| SoBooKs 来源的文件 | 元数据 `creator` 是扫描站名 | 指标 1 判 WARN，需人工核对 ISBN/出版社 |
+| AZW3 sent directly to KOReader | tapping it says "format not supported" | Passing Metric 2 ≠ reader support; **format matching** must be judged separately (KOReader does not support KF8) |
+| `home_dir` points to an empty directory | books are in `documents` but the shelf is empty | after the gate passes you must still verify "visible on the device side" |
+| Files from SoBooKs | metadata `creator` is a scan-site name | Metric 1 gives WARN; manual ISBN/publisher verification required |

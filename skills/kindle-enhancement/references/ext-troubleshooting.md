@@ -1,200 +1,200 @@
-# 07 · 排障手册（T1–T12，全部来自实机踩坑）
+# 07 · Troubleshooting Guide (T1–T12, all from real-device experience)
 
-> 用法：按**症状**查编号；每条含「现象 → 根因 → 诊断命令 → 修复」。
-> 通用前提变量：`VOL=/Volumes/Kindle`；SSH 命令用 `ssh root@<kindle-ip> -p 2222`（KOReader 运行时才有）。
+> How to use: look up the number by **symptom**; each entry covers "symptom → root cause → diagnostic command → fix".
+> Common prerequisite variable: `VOL=/Volumes/Kindle`; SSH commands use `ssh root@<kindle-ip> -p 2222` (only available while KOReader is running).
 
 ---
 
-## T1 ⚠️ 时钟错误 → 所有 HTTPS 失败（本机最坑的一条）
+## T1 ⚠️ Wrong clock → all HTTPS failures (the nastiest one on this device)
 
-**现象**
-- 资讯「更新失败」且列表为空
-- `;kpm install` 失败；某些下载/联网功能异常
-- curl 报：`SSL certificate problem: certificate is not yet valid`
+**Symptom**
+- News shows "update failed" and the list is empty
+- `;kpm install` fails; some download/network features misbehave
+- curl reports: `SSL certificate problem: certificate is not yet valid`
 
-**根因**
-设备时钟停在出厂重置时的时间（本机 2023-09-18），2025/2026 年签发的证书在设备看来"尚未生效"。
-**这与证书、DNS、源都没关系**——是时间不对。
+**Root cause**
+The device clock is stuck at the time of the factory reset (2023-09-18 on this device), so certificates issued in 2025/2026 appear "not yet valid" to the device.
+**This has nothing to do with certificates, DNS, or the feed source** — the time is simply wrong.
 
-**诊断**
+**Diagnosis**
 ```bash
-ssh root@<ip> -p 2222 'date'                                  # 年份不对即命中
-ssh root@<ip> -p 2222 "curl -sS -m 10 -o /dev/null -w '%{http_code}\n' https://www.baidu.com"   # 000 = 全站 HTTPS 失败
+ssh root@<ip> -p 2222 'date'                                  # if the year is wrong, this is it
+ssh root@<ip> -p 2222 "curl -sS -m 10 -o /dev/null -w '%{http_code}\n' https://www.baidu.com"   # 000 = all HTTPS fails
 ```
 
-**修复（越狱后）**
+**Fix (after jailbreak)**
 ```bash
-NOW=$(date '+%Y-%m-%d %H:%M:%S')          # 电脑当前时间
+NOW=$(date '+%Y-%m-%d %H:%M:%S')          # current time on the computer
 ssh root@<ip> -p 2222 "date -s '$NOW' && hwclock -w && date"
-# 验证：baidu / rss.qiaomu.ai 都应返回 200
+# verify: baidu / rss.qiaomu.ai should both return 200
 ```
-**修复（未越狱）**：设置 → 设备选项 → 设备时间 → 手动设置。
+**Fix (not jailbroken)**: Settings → Device Options → Device Time → Set Manually.
 
-**预防**：每次重置设备/换电池后先查 `date`。已写入 RTC（`hwclock -w`），正常重启会保留。
+**Prevention**: check `date` first after every device reset or battery replacement. It has been written to the RTC (`hwclock -w`), so a normal reboot preserves it.
 
 ---
 
-## T2 点 Jailbreak 完全没反应（GitHub Pages 拉不到 jb.sh）
+## T2 Tapping Jailbreak does nothing at all (GitHub Pages can't fetch jb.sh)
 
-**现象**：出现下载提示 → 之后毫无反应：无对话框、无日志、无重启。
+**Symptom**: a download prompt appears → then nothing: no dialog, no log, no reboot.
 
-**根因**：官方 `dialoger.html` 执行
-`curl -L https://kindlemodding.org/jb.sh | sh`，而该域名是 **GitHub Pages**；
-设备直连失败 → `sh` 收到空内容 → 静默退出。
+**Root cause**: the official `dialoger.html` runs
+`curl -L https://kindlemodding.org/jb.sh | sh`, and that domain is **GitHub Pages**;
+a direct connection from the device fails → `sh` receives empty content → it exits silently.
 
-**诊断**（设备上）
+**Diagnosis** (on the device)
 ```bash
 ssh root@<ip> -p 2222 "curl -sS -m 10 -o /dev/null -w '%{http_code}\n' https://kindlemodding.org/jb.sh"
-# 000 / 403 / 超时 即命中；同时 /mnt/us/JB_TRACE.txt 不会生成
+# 000 / 403 / timeout means this is it; also /mnt/us/JB_TRACE.txt will not be created
 ```
 
-**修复**：改用**本地执行变体**（`references/ext-jailbreak.md` §4）
+**Fix**: switch to the **local-execution variant** (`references/ext-jailbreak.md` §4)
 ```bash
 bash scripts/kindle-prepare-local.sh /Volumes/Kindle 90
-# 它会放 jb.sh（官方原版，需核对 sha256）+ assets/dialoger-local.html
+# it places jb.sh (the official original, verify sha256) + assets/dialoger-local.html
 ```
-之后重试页面流程；成功会有 `JB_TRACE.txt`（`DIALOGER_EXECUTED`）与 `JB_LOG.txt`。
+Then retry the page flow; on success you will get `JB_TRACE.txt` (`DIALOGER_EXECUTED`) and `JB_LOG.txt`.
 
 ---
 
-## T3 越狱日志跑到一半停住
+## T3 The jailbreak log stops halfway
 
-**诊断**：插 USB 读 `/mnt/us/JB_LOG.txt` 末尾。
-| 日志线索 | 含义 | 处理 |
+**Diagnosis**: plug in USB and read the end of `/mnt/us/JB_LOG.txt`.
+| Log clue | Meaning | Action |
 |---|---|---|
-| `Could not find chattr command` | 固件缺 chattr | 极少见；换越狱方法或升级到受支持固件 |
-| `not enough space left in varlocal` | `/var/local` 空间不足 | 清理设备内多余文件后重试 |
-| `Failed to setup sh_integration` | appreg 注册失败 | 重启后重试；仍失败看 T2 的本地执行版日志 |
+| `Could not find chattr command` | Firmware lacks chattr | Very rare; use a different jailbreak method or upgrade to supported firmware |
+| `not enough space left in varlocal` | `/var/local` is out of space | Clean up extra files on the device and retry |
+| `Failed to setup sh_integration` | appreg registration failed | Reboot and retry; if it still fails, see the local-execution log in T2 |
 
-**通用**：重启设备 → 重新走一遍（填盘 → 放载荷 → 触发）。JB 是幂等的。
-
----
-
-## T4 KOReader 里书库空白 / 看不到 documents 里的书
-
-**根因**：`home_dir` 指向空目录（本机是 `/mnt/us/Books`）且 `lock_home_folder=true`。
-**诊断/修复**：`references/ext-koreader.md` §5（改 `home_dir=/mnt/us/documents`、`lock_home_folder=false`）。
-> 这条同时解释"传书成功但书架看不到"。
+**General**: reboot the device → go through it again (fill disk → place payload → trigger). JB is idempotent.
 
 ---
 
-## T5 AZW3 打不开：提示"格式不支持"
+## T4 KOReader library is blank / books in documents are not visible
 
-**根因**：KOReader 格式注册表只有 `azw`/`mobi`/`prc`，**没有 `azw3`**（KF8 解析不了）。不是文件坏、也不是 DRM。
-**验证**：
+**Root cause**: `home_dir` points to an empty directory (`/mnt/us/Books` on this device) and `lock_home_folder=true`.
+**Diagnosis/fix**: `references/ext-koreader.md` §5 (set `home_dir=/mnt/us/documents`, `lock_home_folder=false`).
+> This also explains "book transfer succeeded but the bookshelf doesn't show it".
+
+---
+
+## T5 AZW3 won't open: "format not supported"
+
+**Root cause**: KOReader's format registry only has `azw`/`mobi`/`prc`, **there is no `azw3`** (it cannot parse KF8). The file is not corrupt, and it's not DRM.
+**Verify**:
 ```bash
 VOL=/Volumes/Kindle
 grep -nE 'addProvider\("(azw|azw3|mobi)' "$VOL/koreader/frontend/document/credocument.lua" | head
 ```
-**修复**：转 EPUB（`references/ext-send2kindle.md` §6）；或改用原生阅读器读 AZW3（原生支持）。
+**Fix**: convert to EPUB (`references/ext-send2kindle.md` §6); or use the native reader for AZW3 (supported natively).
 
 ---
 
-## T6 DNS 返回 198.18.x.x（fake-IP）导致联网失败
+## T6 DNS returns 198.18.x.x (fake-IP), causing network failures
 
-**现象**：`nslookup rss.qiaomu.ai` → `198.18.7.7` 之类；设备 curl 全部 000。
+**Symptom**: `nslookup rss.qiaomu.ai` → something like `198.18.7.7`; all device curl requests return 000.
 
-**根因**：路由器（如 ImmortalWrt + 代理插件）用 **fake-IP** 劫持 DNS；代理客户端在本机（Mac）能处理，**Kindle 没有代理客户端**所以连不上。
-> 但如果路由器本身在做透明代理，fake-IP 也能通 —— **先修 T1 时钟再判断**，本机就是时钟问题而非 DNS。
+**Root cause**: the router (e.g., ImmortalWrt + a proxy plugin) hijacks DNS with **fake-IP**; the proxy client on this machine (Mac) can handle it, but **the Kindle has no proxy client**, so it cannot connect.
+> However, if the router itself is doing transparent proxying, fake-IP can still work — **fix the T1 clock first before judging**; on this device it was a clock problem, not DNS.
 
-**诊断**
+**Diagnosis**
 ```bash
 ssh root@<ip> -p 2222 "nslookup rss.qiaomu.ai"                       # 198.18.x.x = fake-ip
-ssh root@<ip> -p 2222 "curl -sS -m 10 --resolve rss.qiaomu.ai:443:<真实IP> -o /dev/null -w '%{http_code}\n' https://rss.qiaomu.ai/api/entries?limit=1"
+ssh root@<ip> -p 2222 "curl -sS -m 10 --resolve rss.qiaomu.ai:443:<real-IP> -o /dev/null -w '%{http_code}\n' https://rss.qiaomu.ai/api/entries?limit=1"
 ```
-真实 IP 可用公共 DoH 取：
+You can get the real IP from a public DoH:
 ```bash
 curl -s 'https://223.5.5.5/resolve?name=rss.qiaomu.ai&type=A'
 ```
 
-**修复（任选）**
-1. 路由器：把 `+.qiaomu.ai` 加入 fake-IP 过滤 / 改 redir-host；
-2. 让设备走代理（在路由器上按设备 IP 设规则）；
-3. 临时验证：`--resolve` 直连真实 IP（Cloudflare IP 会变，不适合长期）。
+**Fix (choose one)**
+1. Router: add `+.qiaomu.ai` to the fake-IP filter / switch to redir-host;
+2. Route the device through the proxy (set a rule by device IP on the router);
+3. Temporary verification: `--resolve` directly to the real IP (Cloudflare IPs change, so not suitable long-term).
 
 ---
 
-## T7 USB 插上但电脑不认（无挂载点）
+## T7 USB is plugged in but the computer doesn't recognize it (no mount point)
 
-**根因**：**KOReader 正在运行** → 它会 `SIGSTOP volumd`，Kindle 不会以 U 盘方式出现。
-**判断**：`nc -z -G 2 -w 2 <ip> 2222` 返回成功 = KOReader 在跑。
-**修复**：KOReader → 菜单 → 退出 → 退出 KOReader，回到原生界面，USB 自动挂载。
-> 同理：KOReader 运行时改 `settings.reader.lua` 会被它退出时回写覆盖 —— **改设置前必须退出 KOReader**。
+**Root cause**: **KOReader is running** → it sends `SIGSTOP volumd`, so the Kindle does not appear as a USB drive.
+**Check**: `nc -z -G 2 -w 2 <ip> 2222` returning success = KOReader is running.
+**Fix**: KOReader → Menu → Exit → Exit KOReader, return to the native interface, and USB mounts automatically.
+> Likewise: editing `settings.reader.lua` while KOReader is running gets overwritten when it exits — **you must exit KOReader before changing settings**.
 
 ---
 
-## T8 rsync 备份卡住 / "file truncated while reading"
+## T8 rsync backup hangs / "file truncated while reading"
 
-**现象**：`rsync -a` 长时间无进展；或大 azw3 报 truncated。
-**根因**：Kindle FAT 卷偶发读卡顿（尤其中文长文件名、大文件）。
-**修复**：改**逐文件 + 看门狗**：
+**Symptom**: `rsync -a` makes no progress for a long time; or a large azw3 reports truncated.
+**Root cause**: occasional read stalls on the Kindle FAT volume (especially long Chinese filenames and large files).
+**Fix**: switch to **file-by-file + watchdog**:
 ```bash
 SRC=/Volumes/Kindle/system; DST=/path/backup/system; mkdir -p "$DST"
 while IFS= read -r -d '' f; do
   rel="${f#$SRC/}"; mkdir -p "$DST/$(dirname "$rel")"
   ( cp -p "$f" "$DST/$rel" & p=$!; ( sleep 10; kill -9 $p 2>/dev/null ) & w=$!
-    wait $p 2>/dev/null; r=$?; kill $w 2>/dev/null; exit $r ) || echo "跳过: $rel"
+    wait $p 2>/dev/null; r=$?; kill $w 2>/dev/null; exit $r ) || echo "skipped: $rel"
 done < <(find "$SRC" -print0)
 ```
-备份完必须**比对文件数**（每个顶层目录源 vs 备份）。
+After backing up you must **compare file counts** (source vs. backup, for each top-level directory).
 
 ---
 
-## T9 启动器点了没反应 / KOReader 启动即退出
+## T9 Launcher does nothing when tapped / KOReader exits immediately on start
 
-**根因**：`/mnt/us` 可能是 **noexec**，`reader.lua` 无法执行。
-**修复**：启动器里先 remount：
+**Root cause**: `/mnt/us` may be **noexec**, so `reader.lua` cannot execute.
+**Fix**: remount first in the launcher:
 ```sh
 mount -o remount,exec /mnt/us 2>/dev/null || mount -o exec /mnt/us 2>/dev/null
 cd /mnt/us/koreader && exec sh ./koreader.sh
 ```
-（见 `assets/KOReader.sh`）
+(see `assets/KOReader.sh`)
 
 ---
 
-## T10 资讯「更新失败」/ 列表为空（非 T1 情况）
+## T10 News "update failed" / empty list (not a T1 case)
 
-按顺序：
-1. **T1 时钟**（最常见）。
-2. 补丁与配置是否在：`grep -c 'local patch' .../features/sui_news.lua` 应为 2；
-   `ls .../news/feed_config.lua`、`data/qiaomu_sources.json` 是否可解析（`python3 -m json.tool`）。
-3. 设备上直接测接口：
+In order:
+1. **T1 clock** (most common).
+2. Are the patch and config present: `grep -c 'local patch' .../features/sui_news.lua` should be 2;
+   do `ls .../news/feed_config.lua` and `data/qiaomu_sources.json` parse (`python3 -m json.tool`).
+3. Test the endpoint directly on the device:
    ```bash
    ssh root@<ip> -p 2222 "curl -sS -m 15 -H 'X-Rss-List: reader-v1' -o /tmp/n.json -w '%{http_code}\n' 'https://rss.qiaomu.ai/api/entries?limit=10'"
    ```
-   200 → 服务正常，问题在本机设置；000 → 查 T1 / T6。
-4. 重启 KOReader（插件与配置在启动时加载）。
+   200 → the service is fine, the problem is local settings; 000 → check T1 / T6.
+4. Restart KOReader (plugins and config load at startup).
 
 ---
 
-## T11 微信读书插件不出现 / 登录失败
+## T11 WeRead plugin doesn't appear / login fails
 
-| 现象 | 处理 |
+| Symptom | Action |
 |---|---|
-| 工具菜单没有「微信读书」 | KOReader < 2026.03；或没重启 KOReader；目录名不是 `weread.koplugin` |
-| 扫码登录失败 | 手机端未开通「微信读书 Skill」/未生成 API Key；或账号被风控 |
-| 登录后 SimpleUI 底栏没入口 | 底栏已满 → SimpleUI 快捷动作设置里手动添加 |
+| No "WeRead" in the tools menu | KOReader < 2026.03; or KOReader wasn't restarted; or the directory name isn't `weread.koplugin` |
+| QR code login fails | "WeRead Skill" not enabled on the phone / no API Key generated; or the account is flagged by risk control |
+| No entry in the SimpleUI bottom bar after login | The bottom bar is full → add it manually in SimpleUI's shortcut actions settings |
 
 ---
 
-## T12 睡眠壁纸不生效
+## T12 Sleep wallpaper doesn't take effect
 
-| 现象 | 检查 |
+| Symptom | Check |
 |---|---|
-| 睡眠仍是"休眠中" | 是否在 **KOReader 内**睡眠？（只在 KOReader 生效） |
-| 显示 KOReader logo | `screensaver_dir` 为空/路径错；或目录里没有 KOReader 认的图片格式 |
-| 设置被重置 | 改设置时 KOReader 在运行（T7），被回写覆盖 → 退出后再改 |
-| 图片很暗/残影 | 图片亮度 < 100 → 提亮（`references/ext-wallpapers.md` §2） |
+| Sleep still shows "going to sleep" | Are you sleeping **inside KOReader**? (only effective there) |
+| Shows the KOReader logo | `screensaver_dir` is empty/wrong path; or the directory has no image format KOReader recognizes |
+| Settings get reset | KOReader was running when you changed settings (T7), so it was overwritten → exit first, then change |
+| Image is very dark / ghosting | Image brightness < 100 → brighten it (`references/ext-wallpapers.md` §2) |
 
 ---
 
-## 通用排查顺序（牢记）
+## General troubleshooting order (memorize this)
 
 ```
-1) 时钟对不对？        date
-2) 网络通不通？        curl 一个 HTTPS 站点
-3) 文件在不在？        ls / cat
-4) 版本对不对？        git-rev / _meta.lua
-5) 插件/设置加载了吗？ 重启 KOReader 再试
-6) 日志说了什么？      koreader/crash.log 末尾、JB_LOG.txt
+1) Is the clock right?          date
+2) Is the network up?           curl an HTTPS site
+3) Are the files there?         ls / cat
+4) Is the version right?        git-rev / _meta.lua
+5) Are plugins/settings loaded? restart KOReader and retry
+6) What do the logs say?        end of koreader/crash.log, JB_LOG.txt
 ```

@@ -1,3 +1,3 @@
-28ba96fc0cd579ab99406786f532f9ce3914ced9f8c95ecf45ee6f59c9f19492  /Users/rorouse/DeepSeek Harness/Kindle/publish/kindle-enhancement-skill/dist/kindle-enhancement-skill-v1.0.0.zip
-146ecbfc540e32ca2410a2efe3e106be67edee1d0e4e4fc158895b2fe77d9f0e  /Users/rorouse/DeepSeek Harness/Kindle/publish/kindle-enhancement-skill/dist/kindle-enhancement-v1.0.0.zip
-d752cb2753990a27119ab14b35b4dc064454f2dcb53c13260b4bfdea418fba0b  /Users/rorouse/DeepSeek Harness/Kindle/publish/kindle-enhancement-skill/dist/qiaomu-send2kindle-local-v2.0.0.zip
+5a07a325c6ad035cbeea06b36df2b93a6f7dfc8da2c50c1f296a797b6ee2f8af  /Users/rorouse/DeepSeek Harness/Kindle/publish/kindle-enhancement-skill/dist/kindle-enhancement-skill-v1.0.1.zip
+fb63b2485f7f05c5e046d5b4a9ae449ed29a694bed4b50537eb99332bac43158  /Users/rorouse/DeepSeek Harness/Kindle/publish/kindle-enhancement-skill/dist/kindle-enhancement-v1.0.1.zip
+b5e7702d37eded534d5584448e6d7e23b3412aee869935bb25d05ab5c77a80af  /Users/rorouse/DeepSeek Harness/Kindle/publish/kindle-enhancement-skill/dist/qiaomu-send2kindle-local-v2.0.0.zip

@@ -1,48 +1,48 @@
-# 02 · KOReader 安装（含启动器与书库路径修正）
+# 02 · KOReader installation (including the launcher and library path fix)
 
-> 目标：装好 KOReader 并能从书库一键启动；书库指向正确的 `documents/`。
-> 本机实测：**KOReader v2026.07.1** + `koreader-kindlepw2` 包（soft-float）。
-> 前提：已完成 `references/ext-jailbreak.md`。
+> Goal: install KOReader and be able to launch it with one tap from the library; the library points to the correct `documents/`.
+> Measured on this machine: **KOReader v2026.07.1** + the `koreader-kindlepw2` package (soft-float).
+> Prerequisite: `references/ext-jailbreak.md` completed.
 
 ---
 
-## 1. 选对安装包（选错 = 启动即崩）
+## 1. Choose the right package (wrong choice = crash on launch)
 
-| 包名 | 适用 | 判定方法 |
+| Package name | Applies to | How to tell |
 |---|---|---|
-| `koreader-kindlepw2-*.zip` | **soft-float**：PW2/PW3/KT2/KV/KOA1 等（固件 < 5.16.3） | 设备上 `ls /lib/ld-linux-armhf.so.3` **不存在** |
-| `koreader-kindlehf-*.zip` | **hard-float**：5.16.3+ 的机型 | 上一条 `ls` **存在** |
-| `koreader-kindle-*.zip` / `kindle-legacy` | 更老机型（K4/K5 等） | 见 KOReader Wiki |
+| `koreader-kindlepw2-*.zip` | **soft-float**: PW2/PW3/KT2/KV/KOA1, etc. (firmware < 5.16.3) | `ls /lib/ld-linux-armhf.so.3` on the device **does not exist** |
+| `koreader-kindlehf-*.zip` | **hard-float**: models on 5.16.3+ | the `ls` above **exists** |
+| `koreader-kindle-*.zip` / `kindle-legacy` | older models (K4/K5, etc.) | see the KOReader Wiki |
 
-下载（把 `v2026.07.1` 换成你要的版本）：
+Download (replace `v2026.07.1` with the version you want):
 ```bash
 cd ~/Downloads && mkdir -p koreader && cd koreader
 curl -L -o kor.zip https://github.com/koreader/koreader/releases/download/v2026.07.1/koreader-kindlepw2-v2026.07.1.zip
-unzip -l kor.zip | head -12      # 期望：extensions/koreader/... 与 koreader/...
-shasum -a 256 kor.zip            # 记录，便于他人核对（本机包 = 40,715,224 B）
+unzip -l kor.zip | head -12      # expected: extensions/koreader/... and koreader/...
+shasum -a 256 kor.zip            # record it so others can verify (package on this machine = 40,715,224 B)
 ```
 
-> KOReader 官方 release 不提供逐文件签名；如需严格校验，以 GitHub release 页面为准并核对大小。
+> Official KOReader releases don't provide per-file signatures; if strict verification is needed, rely on the GitHub release page and check the size.
 
 ---
 
-## 2. 安装
+## 2. Installation
 
 ```bash
 VOL=/Volumes/Kindle
 [ -d "$VOL/documents" ] || { echo "不是 Kindle 卷"; exit 1; }
-unzip -o kor.zip -d "$VOL"        # 得到 koreader/ 与 extensions/koreader/
+unzip -o kor.zip -d "$VOL"        # yields koreader/ and extensions/koreader/
 ls -d "$VOL/koreader" "$VOL/extensions/koreader"
-cat "$VOL/koreader/git-rev"        # 期望：v2026.07.1
-find "$VOL/koreader" -type f | wc -l   # 本机约 2227 个文件
+cat "$VOL/koreader/git-rev"        # expected: v2026.07.1
+find "$VOL/koreader" -type f | wc -l   # about 2227 files on this machine
 ```
 
 ---
 
-## 3. 启动器（关键）
+## 3. Launcher (critical)
 
-KOReader 的 `koreader.sh` 最终执行 `./reader.lua`，而 `/mnt/us` 默认可能是 **noexec**。
-因此启动器必须先 remount 再启动。把本包 `assets/KOReader.sh` 放到 `documents/`：
+KOReader's `koreader.sh` ultimately executes `./reader.lua`, and `/mnt/us` may be **noexec** by default.
+Therefore the launcher must remount first and then launch. Place this package's `assets/KOReader.sh` in `documents/`:
 
 ```sh
 #!/bin/sh
@@ -58,41 +58,41 @@ cp assets/KOReader.sh "$VOL/documents/KOReader.sh"
 diskutil eject "$VOL"
 ```
 
-原理：越狱时装了 **sh_integration**（jb.sh 注册的 extractor），所以 `documents/` 里的 `.sh`
-会被当"书"索引，点击即以 root 运行 —— 这是官方认可的脚本启动方式（KOReader FAQ 也提到可用 scriptlet 启动）。
-`# Name:` 决定书库显示名，`# Icon:` 决定图标。
+Principle: during the jailbreak **sh_integration** was installed (the extractor registered by jb.sh), so `.sh` files in `documents/`
+are indexed as "books" and run as root when tapped — this is the officially recognized way to launch scripts (the KOReader FAQ also mentions launching via a scriptlet).
+`# Name:` determines the displayed name in the library, `# Icon:` determines the icon.
 
-> 备选：若你另外装了 KUAL，也可从 KUAL 的 KOReader 菜单启动
-> （`extensions/koreader/` 已随包安装）。
-
----
-
-## 4. 首次启动
-
-设备上：书库 → **KOReader** → 等待 10–30 秒（首次生成 cache 与 settings）。
-成功标志：出现 KOReader 文件浏览器。
-
-首次启动会生成：
-```
-koreader/settings.reader.lua      # 全局设置
-koreader/settings/                # 各插件设置
-koreader/cache/                   # 缓存
-```
+> Alternative: if you separately installed KUAL, you can also launch from KUAL's KOReader menu
+> (`extensions/koreader/` is installed along with the package).
 
 ---
 
-## 5. ⚠️ 书库空白/看不到书：修正 home_dir
+## 4. First launch
 
-**症状**：KOReader 能启动，但书架看不到 `documents/` 里的书。
-**根因**：`home_dir` 被设成了某个空目录（本机是 `/mnt/us/Books`），且 `lock_home_folder=true` 锁死了导航。
+On the device: Library → **KOReader** → wait 10–30 seconds (the first run generates the cache and settings).
+Success indicator: the KOReader file browser appears.
 
-诊断（USB 或 SSH 均可）：
+The first launch generates:
+```
+koreader/settings.reader.lua      # global settings
+koreader/settings/                # per-plugin settings
+koreader/cache/                   # cache
+```
+
+---
+
+## 5. ⚠️ Blank library / no books visible: fix home_dir
+
+**Symptom**: KOReader launches, but the bookshelf doesn't show the books in `documents/`.
+**Root cause**: `home_dir` was set to some empty directory (`/mnt/us/Books` on this machine), and `lock_home_folder=true` locked down navigation.
+
+Diagnose (USB or SSH both work):
 ```bash
 VOL=/Volumes/Kindle
 grep -nE '\["home_dir"\]|\["lock_home_folder"\]|\["lastdir"\]' "$VOL/koreader/settings.reader.lua"
 ```
 
-修复（**必须在 KOReader 退出时改**，否则它退出时会回写覆盖）：
+Fix (**must be edited while KOReader is exited**, otherwise it writes back and overwrites on exit):
 
 ```bash
 VOL=/Volumes/Kindle; S="$VOL/koreader/settings.reader.lua"
@@ -107,32 +107,32 @@ open(p,'w',encoding='utf-8').write(s)
 PY
 grep -E '\["(home_dir|lock_home_folder|lastdir)"\]' "$S"
 ```
-重启 KOReader 后书库即正常。
+After restarting KOReader the library is back to normal.
 
-> 为什么重要：`/mnt/us/documents` 也是无线传书的目标目录（`references/ext-send2kindle.md`）。
-> 修好后"传过去的书立刻可见"，否则会出现"传成功但看不到"。
+> Why this matters: `/mnt/us/documents` is also the target directory for wireless book transfer (`references/ext-send2kindle.md`).
+> Once fixed, "books sent over are immediately visible"; otherwise you get "transfer succeeds but can't be seen".
 
 ---
 
-## 6. 验证清单
+## 6. Verification checklist
 
 ```bash
 VOL=/Volumes/Kindle
 cat "$VOL/koreader/git-rev"                                  # v2026.07.1
-ls -l "$VOL/koreader/reader.lua" "$VOL/koreader/koreader.sh" # 存在且可读
+ls -l "$VOL/koreader/reader.lua" "$VOL/koreader/koreader.sh" # exists and is readable
 grep -E '\["home_dir"\]' "$VOL/koreader/settings.reader.lua" # /mnt/us/documents
-ls "$VOL/documents/KOReader.sh"                              # 启动器存在
+ls "$VOL/documents/KOReader.sh"                              # launcher exists
 ```
-设备上：点 KOReader 能进入；书库能看到 `documents/` 的 EPUB/PDF。
+On the device: tapping KOReader enters it; the library shows the EPUB/PDF files from `documents/`.
 
 ---
 
-## 7. 常见问题
+## 7. FAQ
 
-| 现象 | 处理 |
+| Symptom | Handling |
 |---|---|
-| 点 KOReader 无反应/闪回 | 检查启动器是否有 `mount -o remount,exec`；`/mnt/us` noexec 时 `reader.lua` 无法执行 |
-| 启动后黑屏/花屏 | 确认包是 `kindlepw2`（soft-float）；hard-float 机器用 `kindlehf` |
-| 书库空 | §5（home_dir） |
-| 菜单里没有某插件 | 插件目录名必须严格为 `<名字>.koplugin`，且需**重启 KOReader** |
-| 想升级 KOReader | 退出 KOReader → 用新 zip 覆盖解压 → 重启；设置与插件保留 |
+| Tapping KOReader does nothing / flashes back | Check whether the launcher has `mount -o remount,exec`; when `/mnt/us` is noexec, `reader.lua` cannot execute |
+| Black screen / garbled screen after launch | Confirm the package is `kindlepw2` (soft-float); hard-float machines use `kindlehf` |
+| Empty library | §5 (home_dir) |
+| A plugin is missing from the menu | The plugin directory name must be exactly `<name>.koplugin`, and **KOReader must be restarted** |
+| Want to upgrade KOReader | Exit KOReader → overwrite-extract with the new zip → restart; settings and plugins are preserved |

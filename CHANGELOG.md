@@ -1,42 +1,49 @@
 # Changelog
 
+## v1.0.1 — 2026-10-28
+
+Documentation default changed to English; Chinese remains available as a mirror.
+
+### Changed
+
+- **English is now the default documentation language**: `README.md`, `SKILL.md`, and `references/*.md`
+- Chinese mirrors moved to `README.zh-CN.md`, `SKILL.zh-CN.md`, and `references/zh-CN/*.md`
+- Cross-links updated so each language points to files in its own language tree
+
 ## v1.0.0 — 2026-10-28
 
-首个公开发布版本，基于一台实机 Kindle Paperwhite 3（固件 5.16.2.1.1，soft-float）完整验证。
+First public release, verified end-to-end on a Kindle Paperwhite 3 (firmware 5.16.2.1.1, soft-float).
 
-### 新增
+### Added
 
-- **kindle-enhancement 主技能**
-  - 越狱流水线（WinterBreak2 判定、本地执行版 dialoger 绕开 GitHub Pages 依赖、三件验收证据）
-  - KOReader + SimpleUI 安装、启动器 scriptlet、`home_dir` 修复
-  - 无线传书编排（SSH 配对、SHA-256 回读收据、状态目录丢失后的免配对恢复）
-  - **书源质量门禁**（四条硬指标：元数据/豆瓣、结构、体积、正文安全）
-  - **豆瓣自动核对**：多查询回退（ISBN→主标题→完整标题→去括号/去「全集/共N册」→标题+作者）、
-    占位 ISBN 识别、本地 ISBN 校验位校验、按年份选择正确版次
-  - **元数据回填**：`backfill_isbn.py` 支持 ISBN / 出版社 / 出版日期 / 语言（`--fill-metadata`、`--fix-language`），
-    只改 OPF、自动备份 `.orig`、写入后复验结构
-  - **设备文件名策略**：`name_policy.py` 按豆瓣书名命名（中文书名用中文、英文书名用英文），
-    FAT32 合法化、重名自动加序号
-  - 可选增强：微信读书/RSS 资讯/睡眠壁纸/回滚/T1–T12 排障（合并自早期 kindle-modding-stack 迭代）
-- **qiaomu-send2kindle 传输层（本地增强）**
-  - AZW3/AZW/MOBI/PRC → EPUB 自动转换（KindleUnpack，双路径：mobi8 直接取、mobi7 重打包）
-  - `--name-mode douban|metadata|source` 命名策略
-  - 收据新增 `name_source` / `title` / `douban_url` / `renamed_from`
-- **打包产物**：skill-only zip、companion zip、完整仓库 zip 与 `SHA256SUMS`
+- **kindle-enhancement (primary skill)**
+  - Jailbreak pipeline: WinterBreak2 selection, local-execution payload that removes the GitHub Pages dependency, three verification artifacts
+  - KOReader + SimpleUI installation, launcher scriptlet, `home_dir` fix
+  - Wireless delivery orchestration: SSH pairing, SHA-256 read-back receipts, recovery without re-pairing when the state directory is lost
+  - **Book-source quality gate** with four hard criteria (metadata/Douban, structure, size, body safety)
+  - **Douban automation**: multi-query fallback (ISBN → main title → full title → stripped "complete works / N volumes" variants → title + author), placeholder-ISBN detection, local ISBN check-digit validation, edition-year matching
+  - **Metadata backfill**: `backfill_isbn.py` fills ISBN / publisher / date / language (`--fill-metadata`, `--fix-language`); OPF-only edits, automatic `.orig` backup, structural re-validation
+  - **Device filename policy**: `name_policy.py` names files after the Douban title (Chinese titles for Chinese books, English titles for English books), FAT32 sanitization, automatic numbering on collisions
+  - Optional enhancements: WeRead plugin, RSS news curation, sleep wallpapers, rollback, T1–T12 troubleshooting (merged from the earlier kindle-modding-stack iteration)
+- **qiaomu-send2kindle (transport, locally enhanced)**
+  - Automatic AZW3/AZW/MOBI/PRC → EPUB conversion via KindleUnpack (two paths: direct mobi8 extraction, mobi7 repackaging)
+  - `--name-mode douban|metadata|source` naming policy
+  - Receipts now include `name_source` / `title` / `douban_url` / `renamed_from`
+- **Release packages**: skill-only ZIP, companion ZIP, full repository ZIP, and `SHA256SUMS`
 
-### 修复
+### Fixed
 
-- 豆瓣搜索对 ISBN 支持差 → 多查询回退
-- 书名带括号/「全集」后缀导致豆瓣搜不到 → 查询词扩展
-- 豆瓣占位 ISBN（`9787001xxxxxx`）误判为冲突 → 识别并忽略
-- 多作者 EPUB（含扫描站水印如 `SoBooKs.cc`）作者比对失败 → 比对全部 creator
-- 不同版次 ISBN/年份差异导致误 block → 降级 warn，block 仅保留书名冲突/结构非法/正文不安全
-- `backfill_isbn.py` 在 ISBN 已一致时无法仅修语言 → 拆分变更判断
-- 设备文件名回退成拼音（上传沿用源文件名）→ 默认按豆瓣书名命名
+- Douban search handles ISBN poorly → multi-query fallback
+- Titles with parentheses or "complete works" suffixes failed to match → query variants
+- Douban placeholder ISBNs (`9787001xxxxxx`) were treated as conflicts → detected and ignored
+- Multi-author EPUBs (with scan-site watermarks such as `SoBooKs.cc`) failed author comparison → compare all creators
+- Edition-specific ISBN/year differences caused false blocks → downgraded to `warn`; `block` is reserved for title conflicts, invalid structure, or unsafe body content
+- `backfill_isbn.py` could not fix language alone when the ISBN already matched → split change detection
+- Device filenames fell back to pinyin (upload used the source filename) → default to Douban titles
 
-### 已知限制
+### Known limitations
 
-- 豆瓣无官方 API，页面结构变化或风控时该项降级为 `warn`（人工核对）
-- 豆瓣部分电子书条目只有占位 ISBN（如《刘慈欣短篇科幻小说合集》），无法回填真 ISBN
-- 格式转换依赖独立安装的 KindleUnpack（GPL，不随包分发）
-- 原生模式（EPUB→AZW3 接收端）未做完整实机验收
+- Douban has no official API; when pages change or rate limiting kicks in, this check degrades to `warn` (manual review)
+- Some Douban ebook entries only have placeholder ISBNs (e.g., *刘慈欣短篇科幻小说合集*), so no real ISBN can be backfilled
+- Format conversion depends on a separately installed KindleUnpack (GPL, not redistributed here)
+- Native mode (EPUB→AZW3 receiver) has not been fully validated on real hardware
